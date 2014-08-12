@@ -1,0 +1,27 @@
+# List of cassandra servers
+servers:
+  - host: "192.168.57.102"
+    port: 1984
+    username: ""
+    password: ""
+    displayName: "localhost"
+
+
+# coherence mbeans. Exclude patterns with regex can be used to exclude any unwanted metrics.
+mbeans:
+  - domainName: "Coherence"
+    excludePatterns: [
+       "Service|ReplicatedCache|.*",
+       "Reporter|.*"
+
+    ]
+
+# number of concurrent tasks
+numberOfThreads: 10
+
+#timeout for the thread
+threadTimeout: 300000
+
+#prefix used to show up metrics in AppDynamics
+metricPrefix:  "Custom Metrics|Coherence|"
+

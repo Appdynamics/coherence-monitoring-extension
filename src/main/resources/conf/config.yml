@@ -1,0 +1,24 @@
+# List of coherence servers
+servers:
+  - host: "localhost"
+    port: 7199
+    username: ""
+    password: ""
+    displayName: "localhost"
+
+
+# coherence mbeans. Exclude patterns with regex can be used to exclude any unwanted metrics.
+mbeans:
+  - domainName: "Coherence"
+    excludePatterns: [
+    ]
+
+# number of concurrent tasks
+numberOfThreads: 10
+
+#timeout for the thread
+threadTimeout: 30
+
+#prefix used to show up metrics in AppDynamics
+metricPrefix:  "Custom Metrics|Coherence|"
+
