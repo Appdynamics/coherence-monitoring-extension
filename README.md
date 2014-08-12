@@ -1,7 +1,7 @@
 coherence-monitoring-extension
 ==============================
 
-An AppDynamics extension to be used with a stand alone Java machine agent to provide metrics for Oracle's Coherence Caching Solution.
+An AppDynamics extension to be used with a stand alone Java machine agent to provide metrics for Oracle's Coherence.
 
 
 ## Use Case ##
@@ -21,7 +21,7 @@ To know more about JMX, please follow the below link
 
 ## Metrics Provided ##
 
-In addition to the metrics exposed by , we also add a metric called "Metrics Collection Successful" with a value -1 when an error occurs and 1 when the metrics collection is successful.
+In addition to the metrics exposed by Coherence, we also add a metric called "Metrics Collection Successful" with a value -1 when an error occurs and 1 when the metrics collection is successful.
 
 Note : By default, a Machine agent or a AppServer agent can send a fixed number of metrics to the controller. To change this limit, please follow the instructions mentioned [here](http://docs.appdynamics.com/display/PRO14S/Metrics+Limits).
 For eg.  
