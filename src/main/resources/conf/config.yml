@@ -4,7 +4,6 @@ servers:
     port: 7199
     username: ""
     password: ""
-    displayName: "localhost"
 
 
 # coherence mbeans. Exclude patterns with regex can be used to exclude any unwanted metrics.

@@ -7,7 +7,9 @@ public enum CoherenceMBeanKeyPropertyEnum {
     SERVICE("service"),
     RESPONSIBILITY("responsibility"),
     DOMAIN("Domain"),
-    SUBTYPE("subType");
+    SUBTYPE("subType"),
+    CACHE("cache"),
+    TIER("tier");
 
     private final String name;
 

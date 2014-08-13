@@ -125,7 +125,7 @@ public class CoherenceMonitor extends AManagedMonitor {
     private void printStats(Configuration config, List<CoherenceMetrics> cMetrics) {
         for (CoherenceMetrics cMetric : cMetrics) {
             StringBuilder metricPath = new StringBuilder();
-            metricPath.append(config.getMetricPrefix()).append(cMetric.getDisplayName()).append(METRIC_SEPARATOR);
+            metricPath.append(config.getMetricPrefix()).append(Strings.isNullOrEmpty(cMetric.getDisplayName()) ? "" : cMetric.getDisplayName() + METRIC_SEPARATOR);
             Map<String,String> metricsForAServer = cMetric.getMetrics();
             for(Map.Entry<String,String> entry : metricsForAServer.entrySet()){
                 printAverageAverageIndividual(metricPath.toString() + entry.getKey(), entry.getValue());

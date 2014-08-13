@@ -22,15 +22,15 @@ import java.util.concurrent.Callable;
 public class CoherenceMonitorTask implements Callable<CoherenceMetrics> {
 
     public static final String METRICS_SEPARATOR = "|";
+    public static final String COHERENCE_TYPE_CLUSTER = "Coherence:type=Cluster";
+    public static final String MEMBERS_ATTRIB = "Members";
     private Server server;
-    private MBeanData[] mbeansData;
     private Map<String,MBeanData> mbeanLookup;
     private JMXConnectionUtil jmxConnector;
     public static final Logger logger = Logger.getLogger(CoherenceMonitorTask.class);
 
     public CoherenceMonitorTask(Server server, MBeanData[] mbeansData) {
         this.server = server;
-        this.mbeansData = mbeansData;
         createMBeansLookup(mbeansData);
     }
 
@@ -59,9 +59,11 @@ public class CoherenceMonitorTask implements Callable<CoherenceMetrics> {
             jmxConnector = new JMXConnectionUtil(new JMXConnectionConfig(server.getHost(),server.getPort(),server.getUsername(),server.getPassword()));
             JMXConnector connector = jmxConnector.connect();
             if(connector != null){
+                Object members =  jmxConnector.getMBeanAttribute(new ObjectName(COHERENCE_TYPE_CLUSTER), MEMBERS_ATTRIB);
+                Map<String,CoherenceMember> membersMap = createMemberMap(members);
                 Set<ObjectInstance> allMbeans = jmxConnector.getAllMBeans();
                 if(allMbeans != null) {
-                    Map<String, String> filteredMetrics = applyExcludePatternsAndExtractMetrics(allMbeans);
+                    Map<String, String> filteredMetrics = applyExcludePatternsAndExtractMetrics(allMbeans,membersMap);
                     filteredMetrics.put(CoherenceMonitorConstants.METRICS_COLLECTION_SUCCESSFUL, CoherenceMonitorConstants.SUCCESS_VALUE);
                     coherenceMetrics.setMetrics(filteredMetrics);
                 }
@@ -77,7 +79,21 @@ public class CoherenceMonitorTask implements Callable<CoherenceMetrics> {
         return coherenceMetrics;
     }
 
-    private Map<String, String> applyExcludePatternsAndExtractMetrics(Set<ObjectInstance> allMbeans) {
+    private Map<String,CoherenceMember> createMemberMap(Object members) {
+        Map<String,CoherenceMember> memberMap = new HashMap<String, CoherenceMember>();
+        if(members != null ){
+            String[] membersArr = (String[]) members;
+            for(String member : membersArr){
+                CoherenceMember node = new CoherenceMember(member);
+                if(node.getId() != null){
+                    memberMap.put(node.getId(),node);
+                }
+            }
+        }
+        return memberMap;
+    }
+
+    private Map<String, String> applyExcludePatternsAndExtractMetrics(Set<ObjectInstance> allMbeans,Map<String,CoherenceMember> membersMap) {
         Map<String,String> filteredMetrics = new HashMap<String, String>();
         for(ObjectInstance mbean : allMbeans){
             ObjectName objectName = mbean.getObjectName();
@@ -92,7 +108,7 @@ public class CoherenceMonitorTask implements Callable<CoherenceMetrics> {
                             Object attribute = jmxConnector.getMBeanAttribute(objectName, attr.getName());
                             //AppDynamics only considers number values
                             if (isMetricValueValid(attribute)) {
-                                String metricKey = getMetricsKey(objectName,attr);
+                                String metricKey = getMetricsKey(objectName,attr,membersMap);
                                 if (!isKeyExcluded(metricKey, excludePatterns)) {
                                     if (logger.isDebugEnabled()) {
                                         logger.debug("Metric key:value before ceiling = "+ metricKey + ":" + String.valueOf(attribute));
@@ -150,7 +166,7 @@ public class CoherenceMonitorTask implements Callable<CoherenceMetrics> {
         return excludePattern.replaceAll("\\|","\\\\|");
     }
 
-    private String getMetricsKey(ObjectName objectName,MBeanAttributeInfo attr) {
+    private String getMetricsKey(ObjectName objectName,MBeanAttributeInfo attr,Map<String,CoherenceMember> membersMap) {
         // Standard jmx keys. {type, scope, name, keyspace, path etc.}
         String type = objectName.getKeyProperty(MBeanKeyPropertyEnum.TYPE.toString());
         String domain = objectName.getKeyProperty(CoherenceMBeanKeyPropertyEnum.DOMAIN.toString());
@@ -159,17 +175,29 @@ public class CoherenceMonitorTask implements Callable<CoherenceMetrics> {
         String nodeId = objectName.getKeyProperty(CoherenceMBeanKeyPropertyEnum.NODEID.toString());
         String service = objectName.getKeyProperty(CoherenceMBeanKeyPropertyEnum.SERVICE.toString());
         String responsibility = objectName.getKeyProperty(CoherenceMBeanKeyPropertyEnum.RESPONSIBILITY.toString());
+        String cache = objectName.getKeyProperty(CoherenceMBeanKeyPropertyEnum.CACHE.toString());
+        String tier = objectName.getKeyProperty(CoherenceMBeanKeyPropertyEnum.TIER.toString());
+
         StringBuilder metricsKey = new StringBuilder();
         metricsKey.append(Strings.isNullOrEmpty(type) ? "" : type + METRICS_SEPARATOR);
         metricsKey.append(Strings.isNullOrEmpty(domain) ? "" : domain + METRICS_SEPARATOR);
         metricsKey.append(Strings.isNullOrEmpty(subType) ? "" : subType + METRICS_SEPARATOR);
-        metricsKey.append(Strings.isNullOrEmpty(name) ? "" : name + METRICS_SEPARATOR);
-        metricsKey.append(Strings.isNullOrEmpty(nodeId) ? "" : nodeId + METRICS_SEPARATOR);
         metricsKey.append(Strings.isNullOrEmpty(service) ? "" : service + METRICS_SEPARATOR);
+        metricsKey.append(Strings.isNullOrEmpty(name) ? "" : name + METRICS_SEPARATOR);
+        metricsKey.append(Strings.isNullOrEmpty(cache) ? "" : cache + METRICS_SEPARATOR);
+        metricsKey.append(Strings.isNullOrEmpty(nodeId) ? "" : getMemberInfo(membersMap.get(nodeId)));
+        metricsKey.append(Strings.isNullOrEmpty(tier) ? "" : tier + METRICS_SEPARATOR);
         metricsKey.append(Strings.isNullOrEmpty(responsibility) ? "" : responsibility + METRICS_SEPARATOR);
         metricsKey.append(attr.getName());
 
         return metricsKey.toString();
+    }
+
+    private String getMemberInfo(CoherenceMember node) {
+        StringBuilder memberInfo = new StringBuilder();
+        memberInfo.append(Strings.isNullOrEmpty(node.getMachineName()) ? "" : node.getMachineName() + METRICS_SEPARATOR);
+        memberInfo.append(Strings.isNullOrEmpty(node.getMemberName()) ? "" : node.getMemberName() + METRICS_SEPARATOR);
+        return memberInfo.toString();
     }
 
 
