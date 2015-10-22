@@ -15,9 +15,25 @@ By default, coherence starts with local or remote JMX disabled. Please follow th
 
 http://docs.oracle.com/middleware/1212/coherence/COHMG/jmx.htm#BABJCEFH
 
-To know more about JMX, please follow the below link 
+To know more about JMX, please follow the below link
  
  http://docs.oracle.com/javase/6/docs/technotes/guides/management/agent.html
+
+
+## Troubleshooting steps ##
+Before configuring the extension, please make sure to run the below steps to check if the set up is correct.
+
+1. Telnet into your coherence server from the box where the extension is deployed.
+       telnet <hostname> <port>
+
+       <port> - It is the jmxremote.port specified.
+        <hostname> - IP address
+
+    If telnet works, it confirm the access to the coherence server.
+
+
+2. Start jconsole. Jconsole comes as a utitlity with installed jdk. After giving the correct host and port , check if Coherence
+mbean shows up.
 
 ## Metrics Provided ##
 
@@ -54,16 +70,16 @@ Note : Please make sure to not use tab (\t) while editing yaml files. You may wa
            username: ""
            password: ""
            displayName: "localhost"
-       
-       
-       # coherence mbeans. Exclude patterns with regex can be used to exclude any unwanted metrics.
-       mbeans:
-         - domainName: "Coherence"
-           excludePatterns: [
-              "Service|ReplicatedCache|.*",
-              "Reporter|.*"
-       
-           ]
+           metricOverrides:
+             - metricKey: ".*"
+               disabled: true
+
+             - metricKey: ".*Time"
+               disabled: false
+               postfix: "inSec"
+               multiplier: 0.000001
+
+
        
        # number of concurrent tasks
        numberOfThreads: 10
@@ -73,13 +89,42 @@ Note : Please make sure to not use tab (\t) while editing yaml files. You may wa
        
        #prefix used to show up metrics in AppDynamics
        metricPrefix:  "Custom Metrics|Coherence|"
+
+       metricOverrides:
+            - metricKey: ".*"
+              disabled: true
+
+            - metricKey: ".*Time"
+              disabled: false
+              postfix: "inSec"
+              multiplier: 0.000001
        
 
    ```
-   
-   In the above config file, metrics are being pulled from Coherence mbean domain. Note that the patterns mentioned in the "excludePatterns" will be excluded from showing up in the AppDynamics dashboard.
 
-3. Configure the path to the config.yml file by editing the <task-arguments> in the monitor.xml file in the `<MACHINE_AGENT_HOME>/monitors/CoherenceMonitor/` directory. Below is the sample
+
+3. MetricOverrides can be given at each server level or at the global level. MetricOverrides given at the global level will
+   take precedence over server level.
+
+   The following transformations can be done using the MetricOverrides
+
+   a. metricKey: The identifier to identify a metric or group of metrics. Metric Key supports regex.
+   b. metricPrefix: Text to be prepended before the raw metricPath. It gets appended after the displayName.
+         Eg. Custom Metrics|Coherence|<displayNameForServer>|<metricPrefix>|<metricName>|<metricPostfix>
+
+   c. metricPostfix: Text to be appended to the raw metricPath.
+         Eg. Custom Metrics|Coherence|<displayNameForServer>|<metricPrefix>|<metricName>|<metricPostfix>
+
+   d. multiplier: An integer or decimal to transform the metric value.
+
+   e. timeRollup, clusterRollup, aggregator: These are AppDynamics specific fields. More info about them can be found
+        https://docs.appdynamics.com/display/PRO41/Build+a+Monitoring+Extension+Using+Java
+
+   f. disabled: This boolean value can be used to turn off reporting of metrics.
+
+   #Please note that if more than one regex specified in metricKey satisfies a given metric, the metricOverride specified later will win.
+
+4. Configure the path to the config.yml file by editing the <task-arguments> in the monitor.xml file in the `<MACHINE_AGENT_HOME>/monitors/CoherenceMonitor/` directory. Below is the sample
 
      ```
      <task-arguments>

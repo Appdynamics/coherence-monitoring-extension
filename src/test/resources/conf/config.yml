@@ -4,22 +4,23 @@ servers:
     port: 1984
     username: ""
     password: ""
+    displayName: "myUbuntu"
+    metricOverrides:
+      - metricKey: ".*"
+        disabled: true
 
+      - metricKey: "Platform|java.lang|OperatingSystem|ProcessCpuTime"
+        disabled: false
+        postfix: "inSec"
+        multiplier: 0.000001
+        prefix: "helloWorld"
 
-# coherence mbeans. Exclude patterns with regex can be used to exclude any unwanted metrics.
-mbeans:
-  - domainName: "Coherence"
-    excludePatterns: [
-       "Service|ReplicatedCache|.*",
-       "Reporter|.*"
-
-    ]
 
 # number of concurrent tasks
 numberOfThreads: 10
 
-#timeout for the thread
-threadTimeout: 300000
+#timeout for the thread in seconds
+threadTimeout: 30
 
 #prefix used to show up metrics in AppDynamics
 metricPrefix:  "Custom Metrics|Coherence|"

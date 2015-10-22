@@ -19,7 +19,7 @@ public class ConfigUtil<T> {
      */
     public T readConfig(String configFilename,Class<T> clazz) throws FileNotFoundException {
         logger.info("Reading config file::" + configFilename);
-        Yaml yaml = new Yaml(new Constructor(Configuration.class));
+        Yaml yaml = new Yaml(new Constructor(clazz));
         T config = (T) yaml.load(new FileInputStream(configFilename));
         return config;
     }

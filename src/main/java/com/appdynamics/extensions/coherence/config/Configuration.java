@@ -1,10 +1,12 @@
 package com.appdynamics.extensions.coherence.config;
 
 
+import com.appdynamics.extensions.util.metrics.MetricOverride;
+
 public class Configuration {
 
     private Server[] servers;
-    private MBeanData[] mbeans;
+    private MetricOverride[] metricOverrides;
     private String metricPrefix;
     private int threadTimeout;
     private int numberOfThreads;
@@ -25,12 +27,12 @@ public class Configuration {
         this.metricPrefix = metricPrefix;
     }
 
-    public MBeanData[] getMbeans() {
-        return mbeans;
+    public MetricOverride[] getMetricOverrides() {
+        return metricOverrides;
     }
 
-    public void setMbeans(MBeanData[] mbeans) {
-        this.mbeans = mbeans;
+    public void setMetricOverrides(MetricOverride[] metricOverrides) {
+        this.metricOverrides = metricOverrides;
     }
 
     public int getThreadTimeout() {
