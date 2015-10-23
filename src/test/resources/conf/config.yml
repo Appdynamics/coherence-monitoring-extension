@@ -5,15 +5,15 @@ servers:
     username: ""
     password: ""
     displayName: "myUbuntu"
-    metricOverrides:
-      - metricKey: ".*"
-        disabled: true
-
-      - metricKey: "Platform|java.lang|OperatingSystem|ProcessCpuTime"
-        disabled: false
-        postfix: "inSec"
-        multiplier: 0.000001
-        prefix: "helloWorld"
+#    metricOverrides:
+#      - metricKey: ".*"
+#        disabled: true
+#
+#      - metricKey: "Platform|java.lang|OperatingSystem|ProcessCpuTime"
+#        disabled: false
+#        postfix: "inSec"
+#        multiplier: 0.000001
+#        prefix: "helloWorld"
 
 
 # number of concurrent tasks

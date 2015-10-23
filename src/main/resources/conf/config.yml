@@ -2,7 +2,7 @@
 servers:
   - host: "localhost"
     port: 7199
-    #serviceUrl: 
+    #serviceUrl:
     username: ""
     password: ""
     #Metric Overrides. Change this if you want to transform the metric key or value or its properties.
