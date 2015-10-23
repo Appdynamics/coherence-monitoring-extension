@@ -6,12 +6,12 @@ servers:
     username: ""
     password: ""
     #Metric Overrides. Change this if you want to transform the metric key or value or its properties.
-    metricOverrides:
-      - metricKey: ".*"
-        disabled: true
-
-      - metricKey: ".*Platform.*"
-        disabled: false
+#    metricOverrides:
+#      - metricKey: ".*"
+#        disabled: true
+#
+#      - metricKey: ".*Platform.*"
+#        disabled: false
 
 
 # number of concurrent tasks

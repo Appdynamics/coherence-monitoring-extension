@@ -2,6 +2,7 @@
 servers:
   - host: "192.168.57.102"
     port: 1984
+    #serviceUrl:
     username: ""
     password: ""
     displayName: "myUbuntu"
