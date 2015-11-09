@@ -217,7 +217,10 @@ public class CoherenceMonitorTask implements Runnable {
 
 
     private String formMetricPath(String metricKey) {
-        return metricPrefix + server.getDisplayName() + METRICS_SEPARATOR + metricKey;
+        if(!Strings.isNullOrEmpty(server.getDisplayName())){
+            return metricPrefix + server.getDisplayName() + METRICS_SEPARATOR + metricKey;
+        }
+        return metricPrefix + metricKey;
     }
 
 

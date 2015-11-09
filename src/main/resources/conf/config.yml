@@ -12,7 +12,8 @@ servers:
     port:
     username: ""
     password: ""
-    displayName: "" #displayName is a required field. This will be your server name that will show up in metric path.
+    #displayName is a required field for node level metrics. For cluster level metrics, this field can be removed or left empty.
+    displayName: ""
 
 
 # number of concurrent tasks.

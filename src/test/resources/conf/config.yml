@@ -1,7 +1,7 @@
 ### ANY CHANGES TO THIS FILE DOES NOT REQUIRE A RESTART ###
 
 #This will create this metric in all the tiers, under this path
-metricPrefix: Custom Metrics|Coherence
+metricPrefix: Custom Metrics|Coherence|
 
 #This will create it in specific Tier. Replace <TIER_NAME>
 #metricPrefix: Server|Component:<TIER_NAME>|Custom Metrics|Coherence
@@ -12,7 +12,7 @@ servers:
     port: 1984
     username: ""
     password: ""
-    displayName: "myUbuntu" #displayName is a required field. This will be your server name that will show up in metric path.
+    #displayName is a required field for node level metrics. For cluster level metrics, this field can be removed or left empty.
 
 
 # number of concurrent tasks.
