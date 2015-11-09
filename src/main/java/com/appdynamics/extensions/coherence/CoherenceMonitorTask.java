@@ -1,154 +1,297 @@
 package com.appdynamics.extensions.coherence;
 
 
-import com.appdynamics.extensions.jmx.JMXConnectionUtil;
+import com.appdynamics.extensions.coherence.config.MBean;
+import com.appdynamics.extensions.coherence.config.Server;
 import com.appdynamics.extensions.jmx.MBeanKeyPropertyEnum;
-import com.appdynamics.extensions.util.metrics.Metric;
-import com.appdynamics.extensions.util.metrics.MetricFactory;
 import com.appdynamics.extensions.util.metrics.MetricOverride;
 import com.google.common.base.Strings;
+import com.google.common.collect.Maps;
+import com.google.common.collect.Sets;
 import com.singularity.ee.agent.systemagent.api.AManagedMonitor;
 import com.singularity.ee.agent.systemagent.api.MetricWriter;
-import org.apache.log4j.Logger;
+import org.slf4j.LoggerFactory;
 
-import javax.management.MBeanAttributeInfo;
-import javax.management.MalformedObjectNameException;
-import javax.management.ObjectInstance;
-import javax.management.ObjectName;
+import javax.management.*;
 import javax.management.remote.JMXConnector;
+import javax.management.remote.JMXConnectorFactory;
+import javax.management.remote.JMXServiceURL;
 import java.io.IOException;
+import java.math.BigDecimal;
+import java.math.BigInteger;
+import java.math.RoundingMode;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
-import java.util.concurrent.Callable;
+
+import static com.appdynamics.extensions.coherence.CoherenceMonitorConstants.*;
 import static com.appdynamics.extensions.util.metrics.MetricConstants.METRICS_SEPARATOR;
 
+public class CoherenceMonitorTask implements Runnable {
 
-public class CoherenceMonitorTask implements Callable<Void> {
-
-    public static final String COHERENCE_TYPE_CLUSTER = "Coherence:type=Cluster";
+    public static final double DEFAULT_MULTIPLIER = 1d;
+    public static final String DEFAULT_METRIC_TYPE = "AVERAGE AVERAGE INDIVIDUAL";
     public static final String MEMBERS_ATTRIB = "Members";
+    public static final String COHERENCE_TYPE_CLUSTER = "Coherence:type=Cluster";
+    public static final String COHERENCE_TYPE_CACHE = "Coherence:type=Cache";
+    public static final String TOTAL_GETS_ATTRIB = "TotalGets";
+    public static final String CACHE_HITS_ATTRIB = "CacheHits";
+    public static final String CACHE_HIT_RATIO_ATTRIB = "CacheHitRatio";
     private String metricPrefix;
-    private String displayName;
-    private AManagedMonitor monitor;
-    private MetricOverride[] metricOverrides;
-    private JMXConnectionUtil jmxConnector;
-    public static final Logger logger = Logger.getLogger(CoherenceMonitorTask.class);
-
-    public CoherenceMonitorTask(String metricPrefix,String displayName,MetricOverride[] metricOverrides,JMXConnectionUtil jmxConnector,AManagedMonitor monitor) {
-        this.metricPrefix = metricPrefix;
-        this.displayName = displayName;
-        this.metricOverrides = metricOverrides;
-        this.jmxConnector = jmxConnector;
-        this.monitor = monitor;
-    }
+    private Server server;
+    private AManagedMonitor metricWriter;
+    private JMXServiceURL serviceURL;
+    private List<MBean> mbeans;
+    private Map<String,CoherenceMember> membersMap = Maps.newHashMap();
+    public static final org.slf4j.Logger logger = LoggerFactory.getLogger(CoherenceMonitorTask.class);
 
 
-    public Void call() throws Exception {
-        Map<String, Object> allMetrics = extractJMXMetrics();
-        logger.debug("Total number of metrics extracted from server " + displayName + " " + allMetrics.size());
-        // to get overridden properties for a metric.
-        MetricFactory<Object> metricFactory = new MetricFactory<Object>(metricOverrides);
-        List<Metric> decoratedMetrics = metricFactory.process(allMetrics);
-        reportMetrics(decoratedMetrics);
-        return null;
-    }
 
-    /**
-     * Connects to a remote/local JMX server, applies exclusion filters and collects the metrics
-     *
-     * @return Void. In case of exception, the CoherenceMonitorConstants.METRICS_COLLECTION_SUCCESSFUL is set with CoherenceMonitorConstants.ERROR_VALUE.
-     * @throws Exception
-     */
-    private Map<String, Object> extractJMXMetrics() throws IOException {
-        Map<String, Object> allMetrics = new HashMap<String, Object>();
+
+    public void run() {
         long startTime = System.currentTimeMillis();
-        logger.debug("Starting coherence monitor thread at " + startTime + " for server " + displayName);
-        try{
-            JMXConnector connector = jmxConnector.connect();
-            if(connector != null){
-                Object members = null;
-                Map<String,CoherenceMember> membersMap = null;
-                try {
-                    members = jmxConnector.getMBeanAttribute(new ObjectName(COHERENCE_TYPE_CLUSTER), MEMBERS_ATTRIB);
-                    membersMap = createMemberMap(members);
-                } catch (MalformedObjectNameException e) {
-                   logger.error("Cannot extract cluster members",e);
-                }
-                Set<ObjectInstance> allMbeans = jmxConnector.getAllMBeans();
-                if(allMbeans != null) {
-                    mapMetrics(allMbeans, allMetrics,membersMap);
-                    allMetrics.put(CoherenceMonitorConstants.METRICS_COLLECTION_SUCCESSFUL, CoherenceMonitorConstants.SUCCESS_VALUE);
-                }
-            }
-        }
-        catch(Exception e){
-            logger.error("Error JMX-ing into the server :: " + displayName, e);
-            long diffTime = System.currentTimeMillis() - startTime;
-            logger.debug("Error in coherence thread at " + diffTime);
-            allMetrics.put(CoherenceMonitorConstants.METRICS_COLLECTION_SUCCESSFUL, CoherenceMonitorConstants.ERROR_VALUE);
+        try {
+            logger.debug("Coherence monitor thread for server {} started.",server.getDisplayName());
+            extractAndReportMetrics();
+            printMetric(formMetricPath(METRICS_COLLECTION_SUCCESSFUL), SUCCESS_VALUE
+                    , MetricWriter.METRIC_AGGREGATION_TYPE_OBSERVATION,MetricWriter.METRIC_TIME_ROLLUP_TYPE_CURRENT,MetricWriter.METRIC_CLUSTER_ROLLUP_TYPE_INDIVIDUAL);
+        } catch (Exception e) {
+            logger.error("Error in Coherence Monitor thread for server {}", server.getDisplayName(), e);
+            printMetric(formMetricPath(METRICS_COLLECTION_SUCCESSFUL), ERROR_VALUE
+                    , MetricWriter.METRIC_AGGREGATION_TYPE_OBSERVATION, MetricWriter.METRIC_TIME_ROLLUP_TYPE_CURRENT, MetricWriter.METRIC_CLUSTER_ROLLUP_TYPE_INDIVIDUAL);
+
         }
         finally{
-            jmxConnector.close();
+            long endTime = System.currentTimeMillis() - startTime;
+            logger.debug("Coherence monitor thread for server {} ended. Time taken = {}",server.getDisplayName(),endTime);
         }
-        return allMetrics;
     }
 
-    private void mapMetrics(Set<ObjectInstance> allMbeans, Map<String, Object> allMetrics,Map<String,CoherenceMember> membersMap) {
-        for(ObjectInstance mbean : allMbeans){
-            ObjectName objectName = mbean.getObjectName();
-            MBeanAttributeInfo[] attributes = jmxConnector.fetchAllAttributesForMbean(objectName);
-            if (attributes != null) {
-                for (MBeanAttributeInfo attr : attributes) {
-                    try {
-                        // See we do not violate the security rules, i.e. only if the attribute is readable.
-                        if (attr.isReadable()) {
-                            Object attribute = jmxConnector.getMBeanAttribute(objectName, attr.getName());
-                            //AppDynamics only considers number values
-                            if (attribute != null && attribute instanceof Number) {
-                                String metricKey = getMetricsKey(objectName, attr,membersMap);
-                                allMetrics.put(metricKey, attribute);
+
+    private void extractAndReportMetrics() throws IOException {
+        JMXConnector connector = null;
+
+        try{
+            connector = createJMXConnector();
+            if(connector == null){
+                throw new IOException("Unable to connect to Mbean server");
+            }
+            MBeanServerConnection connection = connector.getMBeanServerConnection();
+            for(MBean mBean : mbeans){
+                try {
+                    ObjectName objectName = ObjectName.getInstance(mBean.getObjectName());
+                    Set<ObjectInstance> objectInstances = connection.queryMBeans(objectName, null);
+                    for(ObjectInstance instance : objectInstances){
+
+                        //gathering metric names by applying exclude filter if present.
+                        List excludeMetrics = (List)mBean.getMetrics().get("exclude");
+                        Set<String> metricsToBeReported = Sets.newHashSet();
+                        if(excludeMetrics != null){
+                            gatherMetricNamesByApplyingExcludeFilter(connection, instance, excludeMetrics, metricsToBeReported);
+                        }
+                        //gathering metric names by applying include filter if present.
+                        List includeMetrics = (List)mBean.getMetrics().get("include");
+                        Map<String,MetricOverride> overrideMap = Maps.newHashMap();
+                        if(includeMetrics != null){
+                            gatherMetricNamesByApplyingIncludeFilter(includeMetrics,metricsToBeReported);
+                            populateOverridesMap(includeMetrics, overrideMap);
+                        }
+                        //getting all the metrics from MBean server and overriding them if
+                        AttributeList attributeList = connection.getAttributes(instance.getObjectName(), metricsToBeReported.toArray(new String[metricsToBeReported.size()]));
+                        List<Attribute> list = attributeList.asList();
+
+                        BigInteger totalGets = BigInteger.ZERO;
+                        BigInteger totalHits = BigInteger.ZERO;
+                        String pathToCacheHits = "";
+
+                        for (Attribute attr : list) {
+                            if(matchObjectName(objectName,COHERENCE_TYPE_CLUSTER) && matchAttributeName(attr,MEMBERS_ATTRIB)){
+                                createMemberMap(attr.getValue());
+                            }
+                            if(isMetricValueValid(attr.getValue())){
+                                String metricKey = getMetricsKey(instance.getObjectName(),getMetricName(overrideMap,attr.getName()));
+                                BigInteger bigVal = toBigInteger(attr.getValue(), getMultiplier(overrideMap,attr.getName()));
+                                //to calculate CacheHitRatio as a derived metric.
+                                if(objectName.toString().startsWith(COHERENCE_TYPE_CACHE)){
+                                    if(metricKey.endsWith(TOTAL_GETS_ATTRIB)){
+                                        totalGets = bigVal;
+                                    }
+                                    else if(metricKey.endsWith(CACHE_HITS_ATTRIB)){
+                                        totalHits = bigVal;
+                                        pathToCacheHits = metricKey.substring(0,metricKey.lastIndexOf(METRICS_SEPARATOR) + 1);
+                                    }
+                                }
+
+                                String[] metricTypes = getMetricTypes(overrideMap,attr.getName());
+                                printMetric(formMetricPath(metricKey), bigVal.toString(),metricTypes[0],metricTypes[1],metricTypes[2]);
                             }
                         }
+                        if(!Strings.isNullOrEmpty(pathToCacheHits) && totalGets != BigInteger.ZERO) {
+                            printMetric(formMetricPath(pathToCacheHits + CACHE_HIT_RATIO_ATTRIB), getCacheHitRatio(totalGets, totalHits), MetricWriter.METRIC_AGGREGATION_TYPE_AVERAGE, MetricWriter.METRIC_TIME_ROLLUP_TYPE_AVERAGE, MetricWriter.METRIC_CLUSTER_ROLLUP_TYPE_INDIVIDUAL);
+                        }
                     }
-                    catch(Exception e){
-                        logger.warn("Error fetching attribute " + attr.getName(), e);
-                    }
+                }
+                catch(MalformedObjectNameException e){
+                    logger.error("Illegal object name {}" + mBean.getObjectName(),e);
+                }
+                catch (Exception e){
+                    logger.error("Error fetching JMX metrics for {} and mbean={}", server.getDisplayName(),mBean.getObjectName(),e);
+                }
+            }
+
+        }
+        finally{
+            connector.close();
+        }
+    }
+
+    private String getCacheHitRatio(BigInteger totalGets, BigInteger totalHits) {
+        return totalHits.divide(totalGets).toString();
+    }
+
+    private boolean matchObjectName(ObjectName objectName,String matchedWith) {
+        return objectName.toString().equalsIgnoreCase(matchedWith);
+    }
+
+    private boolean matchAttributeName(Attribute attribute,String matchedWith){
+        return attribute.getName().equalsIgnoreCase(matchedWith);
+    }
+
+    private String[] getMetricTypes(Map<String, MetricOverride> overrideMap, String name) {
+        if(overrideMap.get(name) == null){
+            return DEFAULT_METRIC_TYPE.split(" ");
+        }
+        MetricOverride override = overrideMap.get(name);
+        return new String[]{override.getAggregator(),override.getTimeRollup(),override.getClusterRollup()};
+    }
+
+    private Double getMultiplier(Map<String, MetricOverride> overrideMap,String name) {
+        if(overrideMap.get(name) == null){
+            return DEFAULT_MULTIPLIER;
+        }
+        return overrideMap.get(name).getMultiplier();
+    }
+
+    private String getMetricName(Map<String, MetricOverride> overrideMap, String name) {
+        if(overrideMap.get(name) == null){
+            return name;
+        }
+        return overrideMap.get(name).getAlias();
+    }
+
+    private JMXConnector createJMXConnector() throws IOException {
+        JMXConnector jmxConnector;
+        final Map<String, Object> env = new HashMap<String, Object>();
+        if(!Strings.isNullOrEmpty(server.getUsername())){
+            env.put(JMXConnector.CREDENTIALS,new String[]{server.getUsername(),server.getPassword()});
+            jmxConnector = JMXConnectorFactory.connect(serviceURL, env);
+        }
+        else{
+            jmxConnector = JMXConnectorFactory.connect(serviceURL);
+        }
+        return jmxConnector;
+    }
+
+
+    private void gatherMetricNamesByApplyingExcludeFilter(MBeanServerConnection connection, ObjectInstance instance, List excludeMetrics, Set<String> metrics) throws InstanceNotFoundException, IntrospectionException, ReflectionException, IOException {
+        MBeanAttributeInfo[] attributes = connection.getMBeanInfo(instance.getObjectName()).getAttributes();
+        for(MBeanAttributeInfo attr : attributes){
+            if (!excludeMetrics.contains(attr.getName())) {
+                if (attr.isReadable()) {
+                    metrics.add(attr.getName());
                 }
             }
         }
     }
 
-    private void reportMetrics(List<Metric> decoratedMetrics) {
-        StringBuffer pathPrefixBuffer = new StringBuffer();
-        pathPrefixBuffer.append(metricPrefix);
-        if(!metricPrefix.endsWith("|")){
-            pathPrefixBuffer.append(METRICS_SEPARATOR);
-        }
-        pathPrefixBuffer.append(displayName).append(METRICS_SEPARATOR);
-        String pathPrefix = pathPrefixBuffer.toString();
-        for(Metric aMetric:decoratedMetrics){
-            printMetric(pathPrefix + aMetric.getMetricPath(),aMetric.getMetricValue().toString(),aMetric.getAggregator(),aMetric.getTimeRollup(),aMetric.getClusterRollup());
+    private void gatherMetricNamesByApplyingIncludeFilter(List includeMetrics,Set<String> metrics) {
+        for(Object inc : includeMetrics){
+            Map metric = (Map) inc;
+            //Get the First Entry which is the metric
+            Map.Entry firstEntry = (Map.Entry) metric.entrySet().iterator().next();
+            String metricName = firstEntry.getKey().toString();
+            metrics.add(metricName); //to get jmx metrics
         }
     }
 
+
+    private String formMetricPath(String metricKey) {
+        return metricPrefix + server.getDisplayName() + METRICS_SEPARATOR + metricKey;
+    }
+
+
+
+    private void populateOverridesMap(List includeMetrics, Map<String, MetricOverride> overrideMap) {
+        for(Object inc : includeMetrics){
+            Map metric = (Map) inc;
+            //Get the First Entry which is the metric
+            Map.Entry firstEntry = (Map.Entry) metric.entrySet().iterator().next();
+            String metricName = firstEntry.getKey().toString();
+            MetricOverride override = new MetricOverride();
+            override.setAlias(firstEntry.getValue().toString());
+            override.setMultiplier(metric.get("multiplier") != null ? Double.parseDouble(metric.get("multiplier").toString()) : DEFAULT_MULTIPLIER);
+            String metricType = metric.get("metricType") != null ? metric.get("metricType").toString() : DEFAULT_METRIC_TYPE;
+            String[] metricTypes = metricType.split(" ");
+            override.setAggregator(metricTypes[0]);
+            override.setTimeRollup(metricTypes[1]);
+            override.setClusterRollup(metricTypes[2]);
+            overrideMap.put(metricName,override);
+        }
+    }
+
+
+
+    private BigInteger toBigInteger(Object value,Double multiplier) {
+        try {
+            BigDecimal bigD = new BigDecimal(value.toString());
+            if(multiplier != null && multiplier != DEFAULT_MULTIPLIER) {
+                bigD = bigD.multiply(new BigDecimal(multiplier));
+            }
+            return bigD.setScale(0, RoundingMode.HALF_UP).toBigInteger();
+        }
+        catch(NumberFormatException nfe){
+        }
+        return BigInteger.ZERO;
+    }
+
+
+
     private void printMetric(String metricPath,String metricValue,String aggType,String timeRollupType,String clusterRollupType) {
-        MetricWriter metricWriter = monitor.getMetricWriter(metricPath,
+        MetricWriter writer = metricWriter.getMetricWriter(metricPath,
                 aggType,
                 timeRollupType,
                 clusterRollupType
         );
-        System.out.println("Sending [" + aggType + METRICS_SEPARATOR + timeRollupType + METRICS_SEPARATOR + clusterRollupType
-                    + "] metric = " + metricPath + " = " + metricValue);
-        if (logger.isDebugEnabled()) {
-            logger.debug("Sending [" + aggType + METRICS_SEPARATOR + timeRollupType + METRICS_SEPARATOR + clusterRollupType
-                    + "] metric = " + metricPath + " = " + metricValue);
-        }
-        metricWriter.printMetric(metricValue);
+        //System.out.println("Sending [" + aggType + METRICS_SEPARATOR + timeRollupType + METRICS_SEPARATOR + clusterRollupType
+        //		+ "] metric = " + metricPath + " = " + metricValue);
+        logger.debug("Sending [{}|{}|{}] metric= {},value={}", aggType, timeRollupType, clusterRollupType, metricPath, metricValue);
+        writer.printMetric(metricValue);
     }
 
-    private String getMetricsKey(ObjectName objectName,MBeanAttributeInfo attr,Map<String,CoherenceMember> membersMap) {
+
+
+
+
+    private boolean isMetricValueValid(Object metricValue) {
+        if(metricValue == null){
+            return false;
+        }
+        if(metricValue instanceof String){
+            try {
+                Double.valueOf((String) metricValue);
+                return true;
+            }
+            catch(NumberFormatException nfe){
+            }
+        }
+        else if(metricValue instanceof Number){
+            return true;
+        }
+        return false;
+    }
+
+    private String getMetricsKey(ObjectName objectName,String attribName) {
         // Standard jmx keys. {type, scope, name, keyspace, path etc.}
         String type = objectName.getKeyProperty(MBeanKeyPropertyEnum.TYPE.toString());
         String domain = objectName.getKeyProperty(CoherenceMBeanKeyPropertyEnum.DOMAIN.toString());
@@ -166,25 +309,34 @@ public class CoherenceMonitorTask implements Callable<Void> {
         metricsKey.append(Strings.isNullOrEmpty(service) ? "" : service + METRICS_SEPARATOR);
         metricsKey.append(Strings.isNullOrEmpty(name) ? "" : name + METRICS_SEPARATOR);
         metricsKey.append(Strings.isNullOrEmpty(cache) ? "" : cache + METRICS_SEPARATOR);
-        metricsKey.append(Strings.isNullOrEmpty(nodeId) ? "" : getMemberInfo(membersMap.get(nodeId)));
+        metricsKey.append(Strings.isNullOrEmpty(nodeId) ? "" : getNodeMember(nodeId));
         metricsKey.append(Strings.isNullOrEmpty(tier) ? "" : tier + METRICS_SEPARATOR);
         metricsKey.append(Strings.isNullOrEmpty(responsibility) ? "" : responsibility + METRICS_SEPARATOR);
-        metricsKey.append(attr.getName());
+        metricsKey.append(attribName);
         return metricsKey.toString();
     }
 
-    private Map<String,CoherenceMember> createMemberMap(Object members) {
-        Map<String,CoherenceMember> memberMap = new HashMap<String, CoherenceMember>();
+    private String getNodeMember(String nodeId) {
+        if(membersMap.get(nodeId) == null){
+            return nodeId + METRICS_SEPARATOR;
+        }
+        String memberInfo = getMemberInfo(membersMap.get(nodeId));
+        if (Strings.isNullOrEmpty(memberInfo)) {
+            return nodeId + METRICS_SEPARATOR;
+        }
+        return memberInfo;
+    }
+
+    private void createMemberMap(Object members) {
         if(members != null ){
             String[] membersArr = (String[]) members;
             for(String member : membersArr){
                 CoherenceMember node = new CoherenceMember(member);
                 if(node.getId() != null){
-                    memberMap.put(node.getId(),node);
+                    membersMap.put(node.getId(),node);
                 }
             }
         }
-        return memberMap;
     }
 
     private String getMemberInfo(CoherenceMember node) {
@@ -192,5 +344,39 @@ public class CoherenceMonitorTask implements Callable<Void> {
         memberInfo.append(Strings.isNullOrEmpty(node.getMachineName()) ? "" : node.getMachineName() + METRICS_SEPARATOR);
         memberInfo.append(Strings.isNullOrEmpty(node.getMemberName()) ? "" : node.getMemberName() + METRICS_SEPARATOR);
         return memberInfo.toString();
+    }
+
+
+    public static class Builder {
+        private CoherenceMonitorTask task = new CoherenceMonitorTask();
+
+        public Builder metricPrefix(String metricPrefix) {
+            task.metricPrefix = metricPrefix;
+            return this;
+        }
+
+        public Builder metricWriter(CoherenceMonitor metricWriter) {
+            task.metricWriter = metricWriter;
+            return this;
+        }
+
+        public Builder server(Server server){
+            task.server = server;
+            return this;
+        }
+
+        public Builder serviceURL(JMXServiceURL serviceURL){
+            task.serviceURL = serviceURL;
+            return this;
+        }
+
+        public Builder mbeans(List<MBean> mBeans){
+            task.mbeans = mBeans;
+            return this;
+        }
+
+        public CoherenceMonitorTask build() {
+            return task;
+        }
     }
 }

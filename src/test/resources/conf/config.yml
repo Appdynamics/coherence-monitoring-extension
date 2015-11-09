@@ -1,28 +1,82 @@
-# List of cassandra servers
+### ANY CHANGES TO THIS FILE DOES NOT REQUIRE A RESTART ###
+
+#This will create this metric in all the tiers, under this path
+metricPrefix: Custom Metrics|Coherence
+
+#This will create it in specific Tier. Replace <TIER_NAME>
+#metricPrefix: Server|Component:<TIER_NAME>|Custom Metrics|Coherence
+
+# List of Coherence Servers
 servers:
   - host: "192.168.57.102"
     port: 1984
-    #serviceUrl:
     username: ""
     password: ""
-    displayName: "myUbuntu"
-#    metricOverrides:
-#      - metricKey: ".*"
-#        disabled: true
-#
-#      - metricKey: "Platform|java.lang|OperatingSystem|ProcessCpuTime"
-#        disabled: false
-#        postfix: "inSec"
-#        multiplier: 0.000001
-#        prefix: "helloWorld"
+    displayName: "myUbuntu" #displayName is a required field. This will be your server name that will show up in metric path.
 
 
-# number of concurrent tasks
+# number of concurrent tasks.
+# This doesn't need to be changed unless many servers are configured
 numberOfThreads: 10
 
-#timeout for the thread in seconds
-threadTimeout: 30
 
-#prefix used to show up metrics in AppDynamics
-metricPrefix:  "Custom Metrics|Coherence|"
+# The configuration of different metrics from various mbeans of coherence server
+# For most cases, the mbean configuration does not need to be changed.
+#
+mbeans:
+  # This mbean is to get cluster related metrics.
+  - objectName: "Coherence:type=Cluster"
+    metrics:
+      include:
+        - Members : "Members"  # If this attribute is removed, nodeIds will be seen in the metric paths and not their corressponding names.
+        - ClusterSize : "ClusterSize"
+
+  - objectName: "Coherence:type=Cache,service=DistributedCache,name=*,nodeId=*,tier=*"
+    metrics:
+      include:
+        - CacheHits : "CacheHits" #The rough number of cache hits since the last time statistics were reset. A cache hit is a read operation invocation (that is, get()) for which an entry exists in this map.
+        - CacheMisses : "CacheMisses" #The rough number of cache misses since the last time statistics were reset.
+        - CachePrunes : "CachePrunes" #The number of prune operations since the last time statistics were reset. A prune operation occurs every time the cache reaches its high watermark as specified by the HighUnits attribute.
+        - TotalGets : "TotalGets" #The total number of get() operations since the last time statistics were reset.
+        - TotalPuts : "TotalPuts" #The total number of put() operations since the last time statistics were reset.
+        - UnitFactor : "UnitFactor" #The factor by which the Units, LowUnits and HighUnits properties are adjusted. Using a BINARY unit calculator, for example, the factor of 1048576 could be used to count megabytes instead of bytes.
+        - Units : "Units" #The size of the cache measured in units. This value needs to be adjusted by the UnitFactor.
+        - Size : "Size" #The number of entries in the cache.
+
+  # This mbean will give cache node specific metrics. 
+  - objectName: "Coherence:type=Node,nodeId=*"
+    metrics:
+      include:
+        - MemoryAvailableMB : "MemoryAvailableMB" #The total amount of memory in the JVM available for new objects in MB.
+        - MemoryMaxMB : "MemoryMaxMB" #The maximum amount of memory that the JVM will attempt to use in MB.
+
+  - objectName: "Coherence:type=Service,name=DistributedCache,nodeId=*"
+    metrics:
+      include:
+        - TaskBacklog : "TaskBacklog" #The size of the backlog queue that holds tasks scheduled to be executed by one of the service pool threads.      
+
+  - objectName: "Coherence:type=StorageManager,service=DistributedCache,cache=*,nodeId=*"
+    metrics:
+      include:
+        - EvictionCount : "EvictionCount" #The total number of evictions from the backing map managed by this Storage Manager.
+        - EventsDispatched : "EventsDispatched" #The total number of events dispatched by the Storage Manager per minute.
+        - NonOptimizedQueryCount : "NonOptimizedQueryCount" #The total number of queries that could not be resolved or were partially resolved against indexes since statistics were last reset.
+        - NonOptimizedQueryAverageMillis : "NonOptimizedQueryAverageMillis" #The average duration in milliseconds per non-optimized query execution since the statistics were last reset.
+        - OptimizedQueryAverageMillis : "OptimizedQueryAverageMillis"  #The average duration in milliseconds per optimized query execution since the statistics were last reset.
+        - OptimizedQueryCount : "OptimizedQueryCount" #The total number of queries that were fully resolved using indexes since statistics were last reset.
+
+  # This mbean will provide system/OS level metrics for every coherence node.
+  - objectName: "Coherence:type=Platform,Domain=java.lang,subType=OperatingSystem,nodeId=*"
+    metrics:
+      include:
+        - FreePhysicalMemorySize : "FreePhysicalMemorySize" #The amount of free physical memory available.
+        - FreeSwapSpaceSize : "FreeSwapSpaceSize" #The amount of free swap space available.
+        - OpenFileDescriptorCount : "OpenFileDescriptorCount" #The number of open file descriptors available.
+        - ProcessCpuLoad : "ProcessCpuLoad" 
+        - SystemCpuLoad : "SystemCpuLoad"
+        - TotalPhysicalMemorySize : "TotalPhysicalMemorySize"
+        - TotalSwapSpaceSize : "TotalSwapSpaceSize"      
+
+    
+
 

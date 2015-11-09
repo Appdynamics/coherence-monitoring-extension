@@ -32,7 +32,7 @@ Before configuring the extension, please make sure to run the below steps to che
     If telnet works, it confirm the access to the coherence server.
 
 
-2. Start jconsole. Jconsole comes as a utitlity with installed jdk. After giving the correct host and port , check if Coherence
+2. Start jconsole. Jconsole comes as a utility with installed jdk. After giving the correct host and port , check if Coherence
 mbean shows up.
 
 ## Metrics Provided ##
@@ -57,74 +57,101 @@ For eg.
 Note : Please make sure to not use tab (\t) while editing yaml files. You may want to validate the yaml file using a [yaml validator](http://yamllint.com/)
 
 1. Configure the coherence instances by editing the config.yml file in `<MACHINE_AGENT_HOME>/monitors/CoherenceMonitor/`.
-2. Configure the MBeans in the config.yml. By default, "Coherence" is all that you may need. But you can add more mbeans as per your requirement.
-   You can also add excludePatterns (regex) to exclude any metric tree from showing up in the AppDynamics controller.
-   
+2. Below is the default config.yml which has metrics configured already
    For eg. 
    
    ```
-       # List of coherence servers
-       servers:
-         - host: "192.168.57.102"
-           port: 1984
-           username: ""
-           password: ""
-           displayName: "localhost"
-           metricOverrides:
-             - metricKey: ".*"
-               disabled: true
+      ### ANY CHANGES TO THIS FILE DOES NOT REQUIRE A RESTART ###
 
-             - metricKey: ".*Time"
-               disabled: false
-               postfix: "inSec"
-               multiplier: 0.000001
+      #This will create this metric in all the tiers, under this path
+      metricPrefix: Custom Metrics|Coherence
+
+      #This will create it in specific Tier. Replace <TIER_NAME>
+      #metricPrefix: Server|Component:<TIER_NAME>|Custom Metrics|Coherence
+
+      # List of Coherence Servers
+      servers:
+        - host: ""
+          port:
+          username: ""
+          password: ""
+          displayName: "" #displayName is a required field. This will be your server name that will show up in metric path.
 
 
-       
-       # number of concurrent tasks
-       numberOfThreads: 10
-       
-       #timeout for the thread
-       threadTimeout: 300000
-       
-       #prefix used to show up metrics in AppDynamics
-       metricPrefix:  "Custom Metrics|Coherence|"
+      # number of concurrent tasks.
+      # This doesn't need to be changed unless many servers are configured
+      numberOfThreads: 10
 
-       metricOverrides:
-            - metricKey: ".*"
-              disabled: true
 
-            - metricKey: ".*Time"
-              disabled: false
-              postfix: "inSec"
-              multiplier: 0.000001
+      # The configuration of different metrics from various mbeans of coherence server
+      # For most cases, the mbean configuration does not need to be changed.
+      #
+      mbeans:
+        # This mbean is to get cluster related metrics.
+        - objectName: "Coherence:type=Cluster"
+          metrics:
+            include:
+              - Members : "Members"  # If this attribute is removed, nodeIds will be seen in the metric paths and not their corressponding names.
+              - ClusterSize : "ClusterSize"
+
+        - objectName: "Coherence:type=Cache,service=DistributedCache,name=*,nodeId=*,tier=*"
+          metrics:
+            include:
+              - CacheHits : "CacheHits" #The rough number of cache hits since the last time statistics were reset. A cache hit is a read operation invocation (that is, get()) for which an entry exists in this map.
+              - CacheMisses : "CacheMisses" #The rough number of cache misses since the last time statistics were reset.
+              - CachePrunes : "CachePrunes" #The number of prune operations since the last time statistics were reset. A prune operation occurs every time the cache reaches its high watermark as specified by the HighUnits attribute.
+              - TotalGets : "TotalGets" #The total number of get() operations since the last time statistics were reset.
+              - TotalPuts : "TotalPuts" #The total number of put() operations since the last time statistics were reset.
+              - UnitFactor : "UnitFactor" #The factor by which the Units, LowUnits and HighUnits properties are adjusted. Using a BINARY unit calculator, for example, the factor of 1048576 could be used to count megabytes instead of bytes.
+              - Units : "Units" #The size of the cache measured in units. This value needs to be adjusted by the UnitFactor.
+              - Size : "Size" #The number of entries in the cache.
+              # A derived metric for CacheHitRatio=CacheHits/TotalGets is calculated for every cache.
+
+        # This mbean will give cache node specific metrics.
+        - objectName: "Coherence:type=Node,nodeId=*"
+          metrics:
+            include:
+              - MemoryAvailableMB : "MemoryAvailableMB" #The total amount of memory in the JVM available for new objects in MB.
+              - MemoryMaxMB : "MemoryMaxMB" #The maximum amount of memory that the JVM will attempt to use in MB.
+
+        - objectName: "Coherence:type=Service,name=DistributedCache,nodeId=*"
+          metrics:
+            include:
+              - TaskBacklog : "TaskBacklog" #The size of the backlog queue that holds tasks scheduled to be executed by one of the service pool threads.
+
+        - objectName: "Coherence:type=StorageManager,service=DistributedCache,cache=*,nodeId=*"
+          metrics:
+            include:
+              - EvictionCount : "EvictionCount" #The total number of evictions from the backing map managed by this Storage Manager.
+              - EventsDispatched : "EventsDispatched" #The total number of events dispatched by the Storage Manager per minute.
+              - NonOptimizedQueryCount : "NonOptimizedQueryCount" #The total number of queries that could not be resolved or were partially resolved against indexes since statistics were last reset.
+              - NonOptimizedQueryAverageMillis : "NonOptimizedQueryAverageMillis" #The average duration in milliseconds per non-optimized query execution since the statistics were last reset.
+              - OptimizedQueryAverageMillis : "OptimizedQueryAverageMillis"  #The average duration in milliseconds per optimized query execution since the statistics were last reset.
+              - OptimizedQueryCount : "OptimizedQueryCount" #The total number of queries that were fully resolved using indexes since statistics were last reset.
+
+        # This mbean will provide system/OS level metrics for every coherence node.
+        - objectName: "Coherence:type=Platform,Domain=java.lang,subType=OperatingSystem,nodeId=*"
+          metrics:
+            include:
+              - FreePhysicalMemorySize : "FreePhysicalMemorySize" #The amount of free physical memory available.
+              - FreeSwapSpaceSize : "FreeSwapSpaceSize" #The amount of free swap space available.
+              - OpenFileDescriptorCount : "OpenFileDescriptorCount" #The number of open file descriptors available.
+              - ProcessCpuLoad : "ProcessCpuLoad"
+              - SystemCpuLoad : "SystemCpuLoad"
+              - TotalPhysicalMemorySize : "TotalPhysicalMemorySize"
+              - TotalSwapSpaceSize : "TotalSwapSpaceSize"
+
+
+
+
+
        
 
    ```
 
 
-3. MetricOverrides can be given at each server level or at the global level. MetricOverrides given at the global level will
-   take precedence over server level.
 
-   The following transformations can be done using the MetricOverrides
-
-   a. metricKey: The identifier to identify a metric or group of metrics. Metric Key supports regex.
-   b. metricPrefix: Text to be prepended before the raw metricPath. It gets appended after the displayName.
-         Eg. Custom Metrics|Coherence|<displayNameForServer>|<metricPrefix>|<metricName>|<metricPostfix>
-
-   c. metricPostfix: Text to be appended to the raw metricPath.
-         Eg. Custom Metrics|Coherence|<displayNameForServer>|<metricPrefix>|<metricName>|<metricPostfix>
-
-   d. multiplier: An integer or decimal to transform the metric value.
-
-   e. timeRollup, clusterRollup, aggregator: These are AppDynamics specific fields. More info about them can be found
-        https://docs.appdynamics.com/display/PRO41/Build+a+Monitoring+Extension+Using+Java
-
-   f. disabled: This boolean value can be used to turn off reporting of metrics.
-
-   #Please note that if more than one regex specified in metricKey satisfies a given metric, the metricOverride specified later will win.
-
-4. Configure the path to the config.yml file by editing the <task-arguments> in the monitor.xml file in the `<MACHINE_AGENT_HOME>/monitors/CoherenceMonitor/` directory. Below is the sample
+3. Configure the path to the config.yml file by editing the <task-arguments> in the monitor.xml file in the `<MACHINE_AGENT_HOME>/monitors/CoherenceMonitor/` directory. Below is the sample
 
      ```
      <task-arguments>
