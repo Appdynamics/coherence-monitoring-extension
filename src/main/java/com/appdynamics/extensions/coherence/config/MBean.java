@@ -9,6 +9,7 @@ public class MBean {
 
     String objectName;
     Map<String,?> metrics;
+    boolean clusterLevelReporting;
 
     public String getObjectName() {
         return objectName;
@@ -27,5 +28,13 @@ public class MBean {
 
     public void setMetrics(Map<String, ?> metrics) {
         this.metrics = metrics;
+    }
+
+    public boolean isClusterLevelReporting() {
+        return clusterLevelReporting;
+    }
+
+    public void setClusterLevelReporting(boolean clusterLevelReporting) {
+        this.clusterLevelReporting = clusterLevelReporting;
     }
 }
