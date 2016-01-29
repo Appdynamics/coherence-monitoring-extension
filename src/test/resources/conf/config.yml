@@ -1,10 +1,10 @@
 ### ANY CHANGES TO THIS FILE DOES NOT REQUIRE A RESTART ###
 
 #This will create this metric in all the tiers, under this path
-metricPrefix: Custom Metrics|Coherence|
+#metricPrefix: Custom Metrics|Coherence|
 
 #This will create it in specific Tier. Replace <TIER_NAME>
-#metricPrefix: Server|Component:<TIER_NAME>|Custom Metrics|Coherence
+metricPrefix: Server|Component:<TIER_NAME>|Custom Metrics|Coherence
 
 # List of Coherence Servers
 servers:
@@ -37,6 +37,7 @@ mbeans:
     metrics:
       include:
         - CacheHits : "CacheHits" #The rough number of cache hits since the last time statistics were reset. A cache hit is a read operation invocation (that is, get()) for which an entry exists in this map.
+
         - CacheMisses : "CacheMisses" #The rough number of cache misses since the last time statistics were reset.
         - CachePrunes : "CachePrunes" #The number of prune operations since the last time statistics were reset. A prune operation occurs every time the cache reaches its high watermark as specified by the HighUnits attribute.
         - TotalGets : "TotalGets" #The total number of get() operations since the last time statistics were reset.
@@ -44,7 +45,7 @@ mbeans:
         - UnitFactor : "UnitFactor" #The factor by which the Units, LowUnits and HighUnits properties are adjusted. Using a BINARY unit calculator, for example, the factor of 1048576 could be used to count megabytes instead of bytes.
         - Units : "Units" #The size of the cache measured in units. This value needs to be adjusted by the UnitFactor.
         - Size : "Size" #The number of entries in the cache.
-          clusterAggregationInMA : "SUM"
+          clusterAggregationInMA: "SUM"
 
   # This mbean will give cache node specific metrics. 
   - objectName: "Coherence:type=Node,nodeId=*"

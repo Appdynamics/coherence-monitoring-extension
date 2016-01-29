@@ -1,10 +1,10 @@
 ### ANY CHANGES TO THIS FILE DOES NOT REQUIRE A RESTART ###
 
 #This will create this metric in all the tiers, under this path
-metricPrefix: Custom Metrics|Coherence
+#metricPrefix: Custom Metrics|Coherence
 
 #This will create it in specific Tier. Replace <TIER_NAME>
-#metricPrefix: Server|Component:<TIER_NAME>|Custom Metrics|Coherence
+metricPrefix: Server|Component:<TIER_NAME>|Custom Metrics|Coherence
 
 # List of Coherence Servers
 servers:

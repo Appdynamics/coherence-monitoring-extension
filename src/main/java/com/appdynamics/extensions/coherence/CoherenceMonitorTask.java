@@ -48,7 +48,6 @@ public class CoherenceMonitorTask implements Runnable {
     private JMXServiceURL serviceURL;
     private List<MBean> mbeans;
     private Map<String,CoherenceMember> membersMap = Maps.newHashMap();
-    private Map<String,MetricAggregator> clusterAggregatorMap = Maps.newHashMap();
     private int totalMetricsReported;
 
 
@@ -86,6 +85,7 @@ public class CoherenceMonitorTask implements Runnable {
             MBeanServerConnection connection = connector.getMBeanServerConnection();
             for(MBean mBean : mbeans){
                 try {
+                    Map<String,MetricAggregator> clusterAggregatorMap = Maps.newHashMap();
                     ObjectName objectName = ObjectName.getInstance(mBean.getObjectName());
                     Set<ObjectInstance> objectInstances = connection.queryMBeans(objectName, null);
                     for(ObjectInstance instance : objectInstances){
@@ -117,9 +117,10 @@ public class CoherenceMonitorTask implements Runnable {
                         // are nothing but all the metrics without the node information. By default the cluster level aggregation is AVG but it can be
                         //overridden by configuring "clusterAggregationInMA" in config file.
                         if(mBean.isClusterLevelReporting()) {
-                            reportClusterLevelMetrics(objectName, instance, overrideMap, list);
+                            calculateClusterLevelMetrics(clusterAggregatorMap, instance, overrideMap, list);
                         }
                     }
+                    reportClusterLevelMetrics(clusterAggregatorMap);
                 }
                 catch(MalformedObjectNameException e){
                     logger.error("Illegal object name {}" + mBean.getObjectName(),e);
@@ -139,7 +140,15 @@ public class CoherenceMonitorTask implements Runnable {
         }
     }
 
-    private void reportClusterLevelMetrics(ObjectName objectName, ObjectInstance instance, Map<String, MetricOverride> overrideMap, List<Attribute> list) {
+    private void reportClusterLevelMetrics(Map<String, MetricAggregator> clusterAggregatorMap) {
+        for (Map.Entry<String, MetricAggregator> entry : clusterAggregatorMap.entrySet()) {
+            String key = entry.getKey();
+            MetricAggregator value = entry.getValue();
+            printMetric(formMetricPath(key), Long.toString(value.aggregate()),value.aggregationType,value.timeRollup,value.clusterRollup);
+        }
+    }
+
+    private void calculateClusterLevelMetrics(Map<String,MetricAggregator> clusterAggregatorMap, ObjectInstance instance, Map<String, MetricOverride> overrideMap, List<Attribute> list) {
         for (Attribute attr : list) {
             if (isMetricValueValid(attr.getValue())) {
                 String metricKey = getMetricsKey(instance.getObjectName(), getMetricName(overrideMap, attr.getName()), false);
@@ -153,11 +162,6 @@ public class CoherenceMonitorTask implements Runnable {
                 }
                 aggregator.report(bigVal.longValue());
             }
-        }
-        for (Map.Entry<String, MetricAggregator> entry : clusterAggregatorMap.entrySet()) {
-            String key = entry.getKey();
-            MetricAggregator value = entry.getValue();
-            printMetric(formMetricPath(key), Long.toString(value.aggregate()),value.aggregationType,value.timeRollup,value.clusterRollup);
         }
     }
 
