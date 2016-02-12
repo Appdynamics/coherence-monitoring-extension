@@ -33,7 +33,7 @@ mbeans:
         - ClusterSize : "ClusterSize"
 
   - objectName: "Coherence:type=Cache,service=DistributedCache,name=*,nodeId=*,tier=*"
-    clusterLevelReporting: true
+    #clusterLevelReporting: true #uncomment this only if you want the extension to do aggregation for all the metrics in this mbean for a cluster
     metrics:
       include:
         - CacheHits : "CacheHits" #The rough number of cache hits since the last time statistics were reset. A cache hit is a read operation invocation (that is, get()) for which an entry exists in this map.
@@ -54,13 +54,13 @@ mbeans:
         - MemoryMaxMB : "MemoryMaxMB" #The maximum amount of memory that the JVM will attempt to use in MB.
 
   - objectName: "Coherence:type=Service,name=DistributedCache,nodeId=*"
-    clusterLevelReporting: true
+    #clusterLevelReporting: true #uncomment this only if you want the extension to do aggregation for all the metrics in this mbean for a cluster
     metrics:
       include:
         - TaskBacklog : "TaskBacklog" #The size of the backlog queue that holds tasks scheduled to be executed by one of the service pool threads.      
 
   - objectName: "Coherence:type=StorageManager,service=DistributedCache,cache=*,nodeId=*"
-    clusterLevelReporting: true
+    #clusterLevelReporting: true #uncomment this only if you want the extension to do aggregation for all the metrics in this mbean for a cluster
     metrics:
       include:
         - EvictionCount : "EvictionCount" #The total number of evictions from the backing map managed by this Storage Manager.
