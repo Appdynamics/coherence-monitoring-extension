@@ -151,10 +151,9 @@ Note : Please make sure to not use tab (\t) while editing yaml files. You may wa
 
 
 The objectNames mentioned in the above yaml may not match your environment exactly. Please use jconsole to extract the objectName and configure it
-accordingly in the config.yaml. For eg. you may not find
+accordingly in the config.yaml. For eg. you may not find objectName: "Coherence:type=Service,name=DistributedCache,nodeId=*"
 
-
-
+Please replace DistributedCache the name in your environment.
 
 3. Configure the path to the config.yml file by editing the <task-arguments> in the monitor.xml file in the `<MACHINE_AGENT_HOME>/monitors/CoherenceMonitor/` directory. Below is the sample
 
