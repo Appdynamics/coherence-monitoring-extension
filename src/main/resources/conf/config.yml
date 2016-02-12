@@ -80,7 +80,14 @@ mbeans:
         - ProcessCpuLoad : "ProcessCpuLoad" 
         - SystemCpuLoad : "SystemCpuLoad"
         - TotalPhysicalMemorySize : "TotalPhysicalMemorySize"
-        - TotalSwapSpaceSize : "TotalSwapSpaceSize"      
+        - TotalSwapSpaceSize : "TotalSwapSpaceSize"
+
+
+  - objectName: "Coherence:type=Service,name=DistributedCache,nodeId=*"
+    metrics:
+      include:
+        - ThreadCount : "ThreadCount" #Specifies the number of daemon threads used by the distributed cache service
+        - ThreadIdleCount : "ThreadIdleCount" #The number of currently idle threads in the service thread pool.
 
     
 

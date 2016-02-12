@@ -73,6 +73,8 @@ mbeans:
         - OptimizedQueryAverageMillis : "OptimizedQueryAverageMillis"  #The average duration in milliseconds per optimized query execution since the statistics were last reset.
         - OptimizedQueryCount : "OptimizedQueryCount" #The total number of queries that were fully resolved using indexes since statistics were last reset.
 
+
+
   # This mbean will provide system/OS level metrics for every coherence node.
   - objectName: "Coherence:type=Platform,Domain=java.lang,subType=OperatingSystem,nodeId=*"
     metrics:
@@ -86,5 +88,9 @@ mbeans:
         - TotalSwapSpaceSize : "TotalSwapSpaceSize"      
 
     
-
+  - objectName: "Coherence:type=Service,name=DistributedCache,nodeId=*"
+    metrics:
+      include:
+        - ThreadCount : "ThreadCount" #Specifies the number of daemon threads used by the distributed cache service
+        - ThreadIdleCount : "ThreadIdleCount" #The number of currently idle threads in the service thread pool.
 

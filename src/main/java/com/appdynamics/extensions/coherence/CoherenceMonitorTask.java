@@ -34,11 +34,12 @@ public class CoherenceMonitorTask implements Runnable {
     public static final String DEFAULT_METRIC_TYPE = MetricWriter.METRIC_AGGREGATION_TYPE_AVERAGE + " " + MetricWriter.METRIC_TIME_ROLLUP_TYPE_AVERAGE + " " + MetricWriter.METRIC_CLUSTER_ROLLUP_TYPE_INDIVIDUAL;
     public static final String MEMBERS_ATTRIB = "Members";
     public static final String COHERENCE_TYPE_CLUSTER = "Coherence:type=Cluster";
-    public static final String COHERENCE_TYPE_CACHE = "Coherence:type=Cache";
-    public static final String COHERENCE_TYPE_SERVICE = "Coherence:type=Service";
     public static final String TOTAL_GETS_ATTRIB = "TotalGets";
     public static final String CACHE_HITS_ATTRIB = "CacheHits";
-    public static final String CACHE_HIT_RATIO_ATTRIB = "CacheHitRatio";
+    public static final String THREAD_COUNT = "ThreadCount";
+    public static final String THREAD_IDLE_COUNT = "ThreadIdleCount";
+    public static final String CACHE_HIT_RATIO_PERCENTAGE_ATTRIB = "CacheHitRatioPercentage";
+    public static final String THREAD_UTILIZATION_PERCENTAGE_ATTRIB = "ThreadUtilizationPercentage";
     public static final String CLUSTER_AGGREGATION_IN_MA = "clusterAggregationInMA";
     public static final org.slf4j.Logger logger = LoggerFactory.getLogger(CoherenceMonitorTask.class);
 
@@ -85,7 +86,7 @@ public class CoherenceMonitorTask implements Runnable {
             MBeanServerConnection connection = connector.getMBeanServerConnection();
             for(MBean mBean : mbeans){
                 try {
-                    Map<String,MetricAggregator> clusterAggregatorMap = Maps.newHashMap();
+                    Map<String,MetricAggregator> clusterAggregatorForEachBean = Maps.newHashMap();
                     ObjectName objectName = ObjectName.getInstance(mBean.getObjectName());
                     Set<ObjectInstance> objectInstances = connection.queryMBeans(objectName, null);
                     for(ObjectInstance instance : objectInstances){
@@ -107,27 +108,22 @@ public class CoherenceMonitorTask implements Runnable {
                         AttributeList attributeList = connection.getAttributes(instance.getObjectName(), metricsToBeReported.toArray(new String[metricsToBeReported.size()]));
                         List<Attribute> list = attributeList.asList();
 
-                        //reporting metrics at node level.
-                        reportNodeLevelMetrics(objectName, instance, overrideMap, list);
+                        Map<MetricOverride,BigInteger> nodeMetrics = Maps.newHashMap();
+                        collectMetrics(list,nodeMetrics,mBean.isClusterLevelReporting(), clusterAggregatorForEachBean, instance.getObjectName(), overrideMap);
 
-                        //reporting metrics at cluster level. This is different than the cluster-level aggregation which happens in the controller.
-                        // This may sound has a hack but customers want to install coherence extension on only 1 coherence management node
-                        // in the cluster and not on each node in the cluster. Because of this, cluster-level or tier-level aggregation becomes meaningless in
-                        //controller. Here, the aggregation of AVERAGE or SUM for cluster level metrics is done in the MA itself. The cluster level metrics
-                        // are nothing but all the metrics without the node information. By default the cluster level aggregation is AVG but it can be
-                        //overridden by configuring "clusterAggregationInMA" in config file.
-                        if(mBean.isClusterLevelReporting()) {
-                            calculateClusterLevelMetrics(clusterAggregatorMap, instance, overrideMap, list);
-                        }
+                        //reporting metrics at node level.
+                        reportNodeMetrics(nodeMetrics);
+
                     }
-                    reportClusterLevelMetrics(clusterAggregatorMap);
+                    reportClusterLevelMetrics(clusterAggregatorForEachBean);
                 }
                 catch(MalformedObjectNameException e){
                     logger.error("Illegal object name {}" + mBean.getObjectName(),e);
                     throw e;
                 }
                 catch (Exception e){
-                    logger.error("Error fetching JMX metrics for {} and mbean={}", server.getDisplayName(),mBean.getObjectName(),e);
+                    //System.out.print("" + e);
+                    logger.error("Error fetching JMX metrics for {} and mbean={}", server.getDisplayName(), mBean.getObjectName(), e);
                     throw e;
                 }
             }
@@ -140,6 +136,111 @@ public class CoherenceMonitorTask implements Runnable {
         }
     }
 
+    private void reportNodeMetrics(Map<MetricOverride, BigInteger> nodeMetrics) {
+        Map<String,BigInteger> derivedMetrics = Maps.newHashMap();
+        Set<String> derivedMetricSlugs = Sets.newHashSet();
+        for (Map.Entry<MetricOverride, BigInteger> entry : nodeMetrics.entrySet()) {
+            MetricOverride nodeMetric = entry.getKey();
+            BigInteger value = entry.getValue();
+            String key = nodeMetric.getMetricKey();
+            printMetric(formMetricPath(key), value.toString(),nodeMetric.getAggregator(),nodeMetric.getTimeRollup(),nodeMetric.getClusterRollup());
+            computeDerivedMetrics(nodeMetric,value,derivedMetrics,derivedMetricSlugs);
+        }
+        //report cache hit ratio
+        for(String derivedSlug : derivedMetricSlugs) {
+            reportCacheHitRatio(derivedMetrics, derivedSlug);
+            reportThreadUtilization(derivedMetrics,derivedSlug);
+        }
+    }
+
+    private void reportThreadUtilization(Map<String, BigInteger> derivedMetrics, String derivedSlug) {
+        BigInteger threadCount = derivedMetrics.get(derivedSlug + THREAD_COUNT);
+        BigInteger threadIdleCount = derivedMetrics.get(derivedSlug + THREAD_IDLE_COUNT);
+        if(threadCount != null && threadIdleCount != null){
+            //utilization = (threadCount-threadIdleCount/threadCount) * 100;
+            String value = computeRatioPercentage(threadCount, threadCount.subtract(threadIdleCount));
+            if (!Strings.isNullOrEmpty(value)) {
+                printMetric(formMetricPath(derivedSlug + THREAD_UTILIZATION_PERCENTAGE_ATTRIB), value, MetricWriter.METRIC_AGGREGATION_TYPE_AVERAGE, MetricWriter.METRIC_TIME_ROLLUP_TYPE_AVERAGE, MetricWriter.METRIC_CLUSTER_ROLLUP_TYPE_INDIVIDUAL);
+            }
+        }
+    }
+
+
+
+    private void reportCacheHitRatio(Map<String, BigInteger> derivedMetrics, String derivedSlug) {
+        BigInteger totalGets = derivedMetrics.get(derivedSlug + TOTAL_GETS_ATTRIB);
+        BigInteger totalHits = derivedMetrics.get(derivedSlug + CACHE_HITS_ATTRIB);
+        if(totalGets != null && totalHits != null) {
+            String value = computeRatioPercentage(totalGets, totalHits);
+            if (!Strings.isNullOrEmpty(value)) {
+                printMetric(formMetricPath(derivedSlug + CACHE_HIT_RATIO_PERCENTAGE_ATTRIB), value, MetricWriter.METRIC_AGGREGATION_TYPE_AVERAGE, MetricWriter.METRIC_TIME_ROLLUP_TYPE_AVERAGE, MetricWriter.METRIC_CLUSTER_ROLLUP_TYPE_INDIVIDUAL);
+
+            }
+        }
+    }
+
+    private void computeDerivedMetrics(MetricOverride nodeMetric, BigInteger value, Map<String, BigInteger> derivedMetrics, Set<String> derivedMetricSlugs) {
+        String metricKey = nodeMetric.getMetricKey();
+        String metricSlug = metricKey.substring(0, metricKey.lastIndexOf(METRICS_SEPARATOR) + 1);
+        if(metricKey.endsWith(TOTAL_GETS_ATTRIB) || metricKey.endsWith(CACHE_HITS_ATTRIB) || metricKey.endsWith(THREAD_COUNT) || metricKey.endsWith(THREAD_IDLE_COUNT)){
+            derivedMetrics.put(metricKey,value);
+            derivedMetricSlugs.add(metricSlug);
+        }
+    }
+
+    private void collectMetrics(List<Attribute> list, Map<MetricOverride, BigInteger> nodeMetrics, boolean clusterLevelReporting, Map<String, MetricAggregator> clusterAggregatorForEachBean,  ObjectName objectName, Map<String, MetricOverride> overrideMap) {
+        for (Attribute attr : list) {
+            //creating a member map
+            if(matchObjectName(objectName,COHERENCE_TYPE_CLUSTER) && matchAttributeName(attr,MEMBERS_ATTRIB)){
+                createMemberMap(attr.getValue());
+            }
+            else if (isMetricValueValid(attr.getValue())) {
+                BigInteger bigVal = toBigInteger(attr.getValue(), getMultiplier(overrideMap, attr.getName()));
+                String[] metricTypes = getMetricTypes(overrideMap,attr.getName());
+
+                //node metrics
+                String nodeMetricKey = getMetricsKey(objectName, getMetricName(overrideMap, attr.getName()), true);
+                MetricOverride nodeMetric = createMetricOverride(nodeMetricKey,metricTypes);
+                nodeMetrics.put(nodeMetric,bigVal);
+
+
+                //cluster metrics
+                //reporting metrics at cluster level. This is different than the cluster-level aggregation which happens in the controller.
+                // This may sound has a hack but customers want to install coherence extension on only 1 coherence management node
+                // in the cluster and not on each node in the cluster. Because of this, cluster-level or tier-level aggregation becomes meaningless in
+                //controller. Here, the aggregation of AVERAGE or SUM for cluster level metrics is done in the MA itself. The cluster level metrics
+                // are nothing but all the metrics without the node information. By default the cluster level aggregation is AVG but it can be
+                //overridden by configuring "clusterAggregationInMA" in config file.
+                if(clusterLevelReporting) {
+                    String clusterMetricKey = getMetricsKey(objectName, getMetricName(overrideMap, attr.getName()), false);
+                    String clusterAggregationInMA = getClusterAggregationInMA(overrideMap,attr.getName());
+                    MetricAggregator aggregator = clusterAggregatorForEachBean.get(clusterMetricKey);
+                    if (aggregator == null) {
+                        aggregator = new MetricAggregator(clusterAggregationInMA,metricTypes[0],metricTypes[1],metricTypes[2]);
+                        clusterAggregatorForEachBean.put(clusterMetricKey, aggregator);
+                    }
+                    aggregator.report(bigVal.longValue());
+                }
+
+            }
+        }
+    }
+
+
+
+
+
+
+    private MetricOverride createMetricOverride(String nodeMetricKey, String[] metricTypes) {
+        MetricOverride override = new MetricOverride();
+        override.setMetricKey(nodeMetricKey);
+        override.setAggregator(metricTypes[0]);
+        override.setTimeRollup(metricTypes[1]);
+        override.setClusterRollup(metricTypes[2]);
+        return override;
+    }
+
+
     private void reportClusterLevelMetrics(Map<String, MetricAggregator> clusterAggregatorMap) {
         for (Map.Entry<String, MetricAggregator> entry : clusterAggregatorMap.entrySet()) {
             String key = entry.getKey();
@@ -148,22 +249,7 @@ public class CoherenceMonitorTask implements Runnable {
         }
     }
 
-    private void calculateClusterLevelMetrics(Map<String,MetricAggregator> clusterAggregatorMap, ObjectInstance instance, Map<String, MetricOverride> overrideMap, List<Attribute> list) {
-        for (Attribute attr : list) {
-            if (isMetricValueValid(attr.getValue())) {
-                String metricKey = getMetricsKey(instance.getObjectName(), getMetricName(overrideMap, attr.getName()), false);
-                BigInteger bigVal = toBigInteger(attr.getValue(), getMultiplier(overrideMap, attr.getName()));
-                String[] metricTypes = getMetricTypes(overrideMap, attr.getName());
-                String clusterAggregationInMA = getClusterAggregationInMA(overrideMap,attr.getName());
-                MetricAggregator aggregator = clusterAggregatorMap.get(metricKey);
-                if (aggregator == null) {
-                    aggregator = new MetricAggregator(clusterAggregationInMA,metricTypes[0],metricTypes[1],metricTypes[2]);
-                    clusterAggregatorMap.put(metricKey, aggregator);
-                }
-                aggregator.report(bigVal.longValue());
-            }
-        }
-    }
+
 
     private String getClusterAggregationInMA(Map<String, MetricOverride> overrideMap, String name) {
         if(overrideMap.get(name) == null || overrideMap.get(name).getOtherProps().get(CLUSTER_AGGREGATION_IN_MA) == null){
@@ -173,41 +259,11 @@ public class CoherenceMonitorTask implements Runnable {
     }
 
 
-    private void reportNodeLevelMetrics(ObjectName objectName, ObjectInstance instance, Map<String, MetricOverride> overrideMap, List<Attribute> list) {
-        BigInteger totalGets = BigInteger.ZERO;
-        BigInteger totalHits = BigInteger.ZERO;
-        String pathToCacheHits = "";
-
-        for (Attribute attr : list) {
-            if(matchObjectName(objectName,COHERENCE_TYPE_CLUSTER) && matchAttributeName(attr,MEMBERS_ATTRIB)){
-                createMemberMap(attr.getValue());
-            }
-            else if(isMetricValueValid(attr.getValue())){
-                String metricKey = getMetricsKey(instance.getObjectName(),getMetricName(overrideMap,attr.getName()),true);
-                BigInteger bigVal = toBigInteger(attr.getValue(), getMultiplier(overrideMap,attr.getName()));
-                //to calculate CacheHitRatio as a derived metric.
-                if(objectName.toString().startsWith(COHERENCE_TYPE_CACHE)){
-                    if(metricKey.endsWith(TOTAL_GETS_ATTRIB)){
-                        totalGets = bigVal;
-                    }
-                    else if(metricKey.endsWith(CACHE_HITS_ATTRIB)){
-                        totalHits = bigVal;
-                        pathToCacheHits = metricKey.substring(0,metricKey.lastIndexOf(METRICS_SEPARATOR) + 1);
-                    }
-                }
-
-                String[] metricTypes = getMetricTypes(overrideMap,attr.getName());
-                printMetric(formMetricPath(metricKey), bigVal.toString(),metricTypes[0],metricTypes[1],metricTypes[2]);
-            }
+    private String computeRatioPercentage(BigInteger divisor, BigInteger dividend) {
+        if(divisor == BigInteger.ZERO){
+            return null;
         }
-        //reporting a derived metric for cache hit ratio
-        if(!Strings.isNullOrEmpty(pathToCacheHits) && totalGets != BigInteger.ZERO) {
-            printMetric(formMetricPath(pathToCacheHits + CACHE_HIT_RATIO_ATTRIB), getCacheHitRatio(totalGets, totalHits), MetricWriter.METRIC_AGGREGATION_TYPE_AVERAGE, MetricWriter.METRIC_TIME_ROLLUP_TYPE_AVERAGE, MetricWriter.METRIC_CLUSTER_ROLLUP_TYPE_INDIVIDUAL);
-        }
-    }
-
-    private String getCacheHitRatio(BigInteger totalGets, BigInteger totalHits) {
-        return totalHits.divide(totalGets).toString();
+        return dividend.divide(divisor).multiply(BigInteger.valueOf(100)).toString() ;
     }
 
     private boolean matchObjectName(ObjectName objectName,String matchedWith) {
@@ -307,7 +363,7 @@ public class CoherenceMonitorTask implements Runnable {
                 override.getOtherProps().put(CLUSTER_AGGREGATION_IN_MA,clusterAggregationInMA.toString());
             }
 
-            overrideMap.put(metricName,override);
+            overrideMap.put(metricName, override);
         }
     }
 
@@ -334,8 +390,8 @@ public class CoherenceMonitorTask implements Runnable {
                 timeRollupType,
                 clusterRollupType
         );
-        //System.out.println("Sending [" + aggType + METRICS_SEPARATOR + timeRollupType + METRICS_SEPARATOR + clusterRollupType
-        //		+ "] metric = " + metricPath + " = " + metricValue);
+      //  System.out.println("Sending [" + aggType + METRICS_SEPARATOR + timeRollupType + METRICS_SEPARATOR + clusterRollupType
+      //  		+ "] metric = " + metricPath + " = " + metricValue);
         logger.debug("Sending [{}|{}|{}] metric= {},value={}", aggType, timeRollupType, clusterRollupType, metricPath, metricValue);
         writer.printMetric(metricValue);
         totalMetricsReported++;
