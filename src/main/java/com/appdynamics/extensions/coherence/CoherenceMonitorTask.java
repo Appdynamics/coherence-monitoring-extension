@@ -54,6 +54,7 @@ public class CoherenceMonitorTask implements Runnable {
 
 
 
+
     public void run() {
         long startTime = System.currentTimeMillis();
         try {
@@ -189,10 +190,26 @@ public class CoherenceMonitorTask implements Runnable {
     }
 
     private void collectMetrics(List<Attribute> list, Map<MetricOverride, BigInteger> nodeMetrics, boolean clusterLevelReporting, Map<String, MetricAggregator> clusterAggregatorForEachBean,  ObjectName objectName, Map<String, MetricOverride> overrideMap) {
+
+
         for (Attribute attr : list) {
             //creating a member map
             if(matchObjectName(objectName,COHERENCE_TYPE_CLUSTER) && matchAttributeName(attr,MEMBERS_ATTRIB)){
                 createMemberMap(attr.getValue());
+            }else if(matchAttributeName(attr,"StatusHA")){
+                //Converting the StatusHA String output to BigDecimal Values
+                try {
+                    BigInteger bigVal = BigInteger.valueOf(CoherenceStatusHAEnum.getStatusHACode(attr.getValue().toString()));
+                    String[] metricTypes = getMetricTypes(overrideMap, attr.getName());
+
+                    //node metrics
+                    String nodeMetricKey = getMetricsKey(objectName, getMetricName(overrideMap, attr.getName()), true);
+                    MetricOverride nodeMetric = createMetricOverride(nodeMetricKey, metricTypes);
+                    nodeMetrics.put(nodeMetric, bigVal);
+                }catch(Exception e){
+                    logger.error("Cannot report statusHA",e);
+                }
+
             }
             else if (isMetricValueValid(attr.getValue())) {
                 BigInteger bigVal = toBigInteger(attr.getValue(), getMultiplier(overrideMap, attr.getName()));
@@ -202,7 +219,6 @@ public class CoherenceMonitorTask implements Runnable {
                 String nodeMetricKey = getMetricsKey(objectName, getMetricName(overrideMap, attr.getName()), true);
                 MetricOverride nodeMetric = createMetricOverride(nodeMetricKey,metricTypes);
                 nodeMetrics.put(nodeMetric,bigVal);
-
 
                 //cluster metrics
                 //reporting metrics at cluster level. This is different than the cluster-level aggregation which happens in the controller.
@@ -373,6 +389,7 @@ public class CoherenceMonitorTask implements Runnable {
         try {
             BigDecimal bigD = new BigDecimal(value.toString());
             if(multiplier != null && multiplier != DEFAULT_MULTIPLIER) {
+
                 bigD = bigD.multiply(new BigDecimal(multiplier));
             }
             return bigD.setScale(0, RoundingMode.HALF_UP).toBigInteger();

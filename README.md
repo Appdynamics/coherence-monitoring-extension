@@ -118,6 +118,7 @@ Note : Please make sure to not use tab (\t) while editing yaml files. You may wa
           metrics:
             include:
               - TaskBacklog : "TaskBacklog" #The size of the backlog queue that holds tasks scheduled to be executed by one of the service pool threads.
+              - StatusHA : "StatusHA" #﻿The High Availability status for this service. # Values would be 1 for ENDANGERED, 2 for NODE-SAFE and 3 for MACHINE-SAFE
 
         - objectName: "Coherence:type=StorageManager,service=DistributedCache,cache=*,nodeId=*"
           metrics:

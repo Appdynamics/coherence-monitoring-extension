@@ -60,7 +60,7 @@ mbeans:
     metrics:
       include:
         - TaskBacklog : "TaskBacklog" #The size of the backlog queue that holds tasks scheduled to be executed by one of the service pool threads.
-        - Statistics : "Statistics" #Statistics for this service in human readable format.
+
 
   - objectName: "Coherence:type=StorageManager,service=DistributedCache,cache=*,nodeId=*"
     clusterLevelReporting: true
