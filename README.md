@@ -35,9 +35,12 @@ Before configuring the extension, please make sure to run the below steps to che
 2. Start jconsole. Jconsole comes as a utility with installed jdk. After giving the correct host and port , check if Coherence
 mbean shows up.
 
+3. It is a good idea to match the mbean configuration in the config.yml against the jconsole. JMX is case sensitive so make
+sure the config matches exact.
+
 ## Metrics Provided ##
 
-In addition to the metrics exposed by Coherence, we also add a metric called "Metrics Collection Successful" with a value -1 when an error occurs and 1 when the metrics collection is successful.
+In addition to the metrics exposed by Coherence, we also add a metric called "Metrics Collection Successful" with a value 0 when an error occurs and 1 when the metrics collection is successful.
 
 Note : By default, a Machine agent or a AppServer agent can send a fixed number of metrics to the controller. To change this limit, please follow the instructions mentioned [here](http://docs.appdynamics.com/display/PRO14S/Metrics+Limits).
 For eg.  
@@ -64,28 +67,28 @@ Note : Please make sure to not use tab (\t) while editing yaml files. You may wa
       ### ANY CHANGES TO THIS FILE DOES NOT REQUIRE A RESTART ###
 
       #This will create this metric in all the tiers, under this path
-      metricPrefix: Custom Metrics|Coherence
+      #metricPrefix: Custom Metrics|Coherence
 
-      #This will create it in specific Tier. Replace <TIER_NAME>
-      #metricPrefix: Server|Component:<TIER_NAME>|Custom Metrics|Coherence
+      #This will create it in specific Tier/Component. Make sure to replace <COMPONENT_ID> with the appropriate one from your environment.
+      #To find the <COMPONENT_ID> in your environment, please follow the screenshot https://docs.appdynamics.com/display/PRO42/Build+a+Monitoring+Extension+Using+Java
+      metricPrefix: Server|Component:<COMPONENT_ID>|Custom Metrics|Coherence
 
-      # List of Coherence Servers
-      servers:
+      # List of Coherence Instances
+      instances:
         - host: ""
           port:
           username: ""
           password: ""
-          displayName: "" #displayName is a required field. This will be your server name that will show up in metric path.
+          displayName: ""  #displayName is a REQUIRED field for  level metrics.
 
 
       # number of concurrent tasks.
-      # This doesn't need to be changed unless many servers are configured
+      # This doesn't need to be changed unless many instances are configured
       numberOfThreads: 10
 
 
       # The configuration of different metrics from various mbeans of coherence server
       # For most cases, the mbean configuration does not need to be changed.
-      #
       mbeans:
         # This mbean is to get cluster related metrics.
         - objectName: "Coherence:type=Cluster"
@@ -95,6 +98,7 @@ Note : Please make sure to not use tab (\t) while editing yaml files. You may wa
               - ClusterSize : "ClusterSize"
 
         - objectName: "Coherence:type=Cache,service=DistributedCache,name=*,nodeId=*,tier=*"
+          #aggregation: true #uncomment this only if you want the extension to do aggregation for all the metrics in this mbean for a cluster
           metrics:
             include:
               - CacheHits : "CacheHits" #The rough number of cache hits since the last time statistics were reset. A cache hit is a read operation invocation (that is, get()) for which an entry exists in this map.
@@ -105,7 +109,6 @@ Note : Please make sure to not use tab (\t) while editing yaml files. You may wa
               - UnitFactor : "UnitFactor" #The factor by which the Units, LowUnits and HighUnits properties are adjusted. Using a BINARY unit calculator, for example, the factor of 1048576 could be used to count megabytes instead of bytes.
               - Units : "Units" #The size of the cache measured in units. This value needs to be adjusted by the UnitFactor.
               - Size : "Size" #The number of entries in the cache.
-              # A derived metric for CacheHitRatio=CacheHits/TotalGets is calculated for every cache.
 
         # This mbean will give cache node specific metrics.
         - objectName: "Coherence:type=Node,nodeId=*"
@@ -115,12 +118,19 @@ Note : Please make sure to not use tab (\t) while editing yaml files. You may wa
               - MemoryMaxMB : "MemoryMaxMB" #The maximum amount of memory that the JVM will attempt to use in MB.
 
         - objectName: "Coherence:type=Service,name=DistributedCache,nodeId=*"
+          #aggregation: true #uncomment this only if you want the extension to do aggregation for all the metrics in this mbean for a cluster
           metrics:
             include:
               - TaskBacklog : "TaskBacklog" #The size of the backlog queue that holds tasks scheduled to be executed by one of the service pool threads.
               - StatusHA : "StatusHA" #﻿The High Availability status for this service. # Values would be 1 for ENDANGERED, 2 for NODE-SAFE and 3 for MACHINE-SAFE
+                convert : {
+                  "ENDANGERED" : "1",
+                  "NODE-SAFE" : "2",
+                  "MACHINE-SAFE" : "3"
+                }
 
         - objectName: "Coherence:type=StorageManager,service=DistributedCache,cache=*,nodeId=*"
+          #aggregation: true #uncomment this only if you want the extension to do aggregation for all the metrics in this mbean for a cluster
           metrics:
             include:
               - EvictionCount : "EvictionCount" #The total number of evictions from the backing map managed by this Storage Manager.
@@ -143,21 +153,21 @@ Note : Please make sure to not use tab (\t) while editing yaml files. You may wa
               - TotalSwapSpaceSize : "TotalSwapSpaceSize"
 
 
-
-
-
-       
+        - objectName: "Coherence:type=Service,name=DistributedCache,nodeId=*"
+          metrics:
+            include:
+              - ThreadCount : "ThreadCount" #Specifies the number of daemon threads used by the distributed cache service
+              - ThreadIdleCount : "ThreadIdleCount" #The number of currently idle threads in the service thread pool.
 
    ```
 
 
 The objectNames mentioned in the above yaml may not match your environment exactly. Please use jconsole to extract the objectName and configure it
 accordingly in the config.yaml. For eg. you may not find objectName: "Coherence:type=Service,name=DistributedCache,nodeId=*"
-
 Please replace DistributedCache the name in your environment.
 
 3. Configure the path to the config.yml file by editing the <task-arguments> in the monitor.xml file in the `<MACHINE_AGENT_HOME>/monitors/CoherenceMonitor/` directory. Below is the sample
-
+   For Windows, make sure you enter the right path.
      ```
      <task-arguments>
          <!-- config file-->

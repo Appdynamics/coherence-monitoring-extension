@@ -14,7 +14,6 @@
                 <task-arguments>
                     <!-- config file-->
                     <argument name="config-file" is-required="true" default-value="monitors/CoherenceMonitor/config.yml" />
-                    <argument name="log-prefix" is-required="false" default-value="[CoherenceAppDExt] " />
                 </task-arguments>
                 <java-task>
                         <classpath>coherence-monitoring-extension.jar</classpath>

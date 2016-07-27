@@ -1,0 +1,48 @@
+### ANY CHANGES TO THIS FILE DOES NOT REQUIRE A RESTART ###
+
+#This will create this metric in all the tiers, under this path
+metricPrefix: Custom Metrics|Coherence|
+
+#This will create it in specific Tier aka Component. Replace <COMPONENT_ID> with actual component Id.
+#To get the COMPONENT_ID, please refer https://docs.appdynamics.com/display/PRO42/Build+a+Monitoring+Extension+Using+Java
+#metricPrefix: Server|Component:<COMPONENT_ID>|Custom Metrics|Coherence
+
+# List of Coherence Servers
+instances:
+  - host: "192.168.57.102"
+    port: 1984
+    username: ""
+    password: ""
+    #displayName is a required field for node level metrics.
+    displayName: "local"
+
+
+# number of concurrent tasks.
+# This doesn't need to be changed unless many servers are configured
+numberOfThreads: 10
+
+
+# The configuration of different metrics from various mbeans of coherence server
+# For most cases, the mbean configuration does not need to be changed.
+#
+mbeans:
+  # This mbean is to get cluster related metrics.
+  - objectName: "Coherence:type=Cluster"
+    metrics:
+      include:
+        - Members : "Members"  # If this attribute is removed, nodeIds will be seen in the metric paths and not their corressponding names.
+        - ClusterSize : "ClusterSize"
+
+  - objectName: "Coherence:type=Cache,service=DistributedCache,name=*,nodeId=*,tier=*"
+    aggregation: true
+    metricType: "SUM SUM COLLECTIVE"
+    metrics:
+      include:
+        - CacheHits : "CacheHits" #The rough number of cache hits since the last time statistics were reset. A cache hit is a read operation invocation (that is, get()) for which an entry exists in this map.
+        - CacheMisses : "CacheMisses" #The rough number of cache misses since the last time statistics were reset.
+        - CachePrunes : "CachePrunes" #The number of prune operations since the last time statistics were reset. A prune operation occurs every time the cache reaches its high watermark as specified by the HighUnits attribute.
+        - TotalGets : "TotalGets" #The total number of get() operations since the last time statistics were reset.
+        - TotalPuts : "TotalPuts" #The total number of put() operations since the last time statistics were reset.
+        - UnitFactor : "UnitFactor" #The factor by which the Units, LowUnits and HighUnits properties are adjusted. Using a BINARY unit calculator, for example, the factor of 1048576 could be used to count megabytes instead of bytes.
+        - Units : "Units" #The size of the cache measured in units. This value needs to be adjusted by the UnitFactor.
+        - Size : "Size" #The number of entries in the cache.

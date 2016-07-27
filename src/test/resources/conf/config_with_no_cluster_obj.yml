@@ -1,13 +1,13 @@
 ### ANY CHANGES TO THIS FILE DOES NOT REQUIRE A RESTART ###
 
 #This will create this metric in all the tiers, under this path
-metricPrefix: Custom Metrics|Coherence
+metricPrefix: Custom Metrics|Coherence|
 
 #This will create it in specific Tier aka Component. Replace <COMPONENT_ID> with actual component Id.
 #To get the COMPONENT_ID, please refer https://docs.appdynamics.com/display/PRO42/Build+a+Monitoring+Extension+Using+Java
 #metricPrefix: Server|Component:<COMPONENT_ID>|Custom Metrics|Coherence
 
-# List of Coherence Instances
+# List of Coherence Servers
 instances:
   - host: "192.168.57.102"
     port: 1984
@@ -26,16 +26,7 @@ numberOfThreads: 10
 # For most cases, the mbean configuration does not need to be changed.
 #
 mbeans:
-  # This mbean is to get cluster related metrics.
-  - objectName: "Coherence:type=Cluster"
-    metrics:
-      include:
-        - Members : "Members"  # If this attribute is removed, nodeIds will be seen in the metric paths and not their corressponding names.
-        - ClusterSize : "ClusterSize"
-
-  - objectName: "Coherence:type=Cache,service=*,name=*,nodeId=*,tier=*"
-    aggregation: true
-    metricType: "AVERAGE AVERAGE COLLECTIVE"
+  - objectName: "Coherence:type=Cache,service=DistributedCache,name=*,nodeId=*,tier=*"
     metrics:
       include:
         - CacheHits : "CacheHits" #The rough number of cache hits since the last time statistics were reset. A cache hit is a read operation invocation (that is, get()) for which an entry exists in this map.
@@ -47,32 +38,18 @@ mbeans:
         - Units : "Units" #The size of the cache measured in units. This value needs to be adjusted by the UnitFactor.
         - Size : "Size" #The number of entries in the cache.
 
-  # This mbean will give cache node specific metrics. 
+  # This mbean will give cache node specific metrics.
   - objectName: "Coherence:type=Node,nodeId=*"
     metrics:
       include:
         - MemoryAvailableMB : "MemoryAvailableMB" #The total amount of memory in the JVM available for new objects in MB.
         - MemoryMaxMB : "MemoryMaxMB" #The maximum amount of memory that the JVM will attempt to use in MB.
 
-  - objectName: "Coherence:type=Service,name=*,nodeId=*"
-    aggregation: true
+  - objectName: "Coherence:type=Service,name=DistributedCache,nodeId=*"
     metrics:
       include:
         - TaskBacklog : "TaskBacklog" #The size of the backlog queue that holds tasks scheduled to be executed by one of the service pool threads.
-        - TaskAverageDuration : "TaskAverageDuration"
-        - RequestAverageDuration : "RequestAverageDuration"
-        - PartitionsAll : "PartitionsAll"
-        - PartitionsUnbalanced : "PartitionsUnbalanced"
-        - PartitionsEndangered : "PartitionsEndangered"
-        - ThreadCount : "ThreadCount" #Specifies the number of daemon threads used by the distributed cache service
-        - ThreadIdleCount : "ThreadIdleCount" #The number of currently idle threads in the service thread pool.
-        - ThreadUtilizationPercentage : "ThreadUtilizationPercentage"
-        - StatusHA : "StatusHA" #The High Availability status for this service. Values would be 1 for ENDANGERED, 2 for NODE-SAFE and 3 for MACHINE-SAFE
-          convert : {
-             "ENDANGERED" : "1",
-             "NODE-SAFE" : "2",
-             "MACHINE-SAFE" : "3"
-          }
+
 
   - objectName: "Coherence:type=StorageManager,service=DistributedCache,cache=*,nodeId=*"
     metrics:
@@ -91,12 +68,12 @@ mbeans:
         - FreePhysicalMemorySize : "FreePhysicalMemorySize" #The amount of free physical memory available.
         - FreeSwapSpaceSize : "FreeSwapSpaceSize" #The amount of free swap space available.
         - OpenFileDescriptorCount : "OpenFileDescriptorCount" #The number of open file descriptors available.
-        - ProcessCpuLoad : "ProcessCpuLoad" 
+        - ProcessCpuLoad : "ProcessCpuLoad"
         - SystemCpuLoad : "SystemCpuLoad"
         - TotalPhysicalMemorySize : "TotalPhysicalMemorySize"
-        - TotalSwapSpaceSize : "TotalSwapSpaceSize"      
+        - TotalSwapSpaceSize : "TotalSwapSpaceSize"
 
-    
+
   - objectName: "Coherence:type=Service,name=DistributedCache,nodeId=*"
     metrics:
       include:

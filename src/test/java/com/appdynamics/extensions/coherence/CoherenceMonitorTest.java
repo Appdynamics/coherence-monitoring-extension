@@ -9,13 +9,11 @@ import java.util.Map;
 
 public class CoherenceMonitorTest {
 
-    public static final String CONFIG_ARG = "config-file";
-
     @Test
-    public void testCassandraMonitorExtension() throws TaskExecutionException {
-        CoherenceMonitor cassandraMonitor = new CoherenceMonitor();
+    public void test() throws TaskExecutionException {
+        CoherenceMonitor monitor = new CoherenceMonitor();
         Map<String, String> taskArgs = Maps.newHashMap();
-        taskArgs.put(CONFIG_ARG, "src/test/resources/conf/config.yml");
-        cassandraMonitor.execute(taskArgs, null);
+        taskArgs.put("config-file", "src/test/resources/conf/config.yml");
+        monitor.execute(taskArgs, null);
     }
 }

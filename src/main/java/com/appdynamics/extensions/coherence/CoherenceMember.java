@@ -1,17 +1,20 @@
 package com.appdynamics.extensions.coherence;
 
 import com.google.common.base.Splitter;
+import com.google.common.base.Strings;
+
 
 public class CoherenceMember {
 
-    public static final String ID = "Id";
-    public static final String MACHINE = "machine";
-    public static final String MEMBER = "member";
+    private static final String ID = "Id";
+    private static final String MACHINE = "machine";
+    private static final String MEMBER = "member";
     private String id;
     private String machineName;
     private String memberName;
 
-    public CoherenceMember(String text){
+
+    CoherenceMember(String text){
         parseText(text);
     }
 
@@ -31,27 +34,36 @@ public class CoherenceMember {
         }
     }
 
-    public String getId() {
+    public String getMemberInfo() {
+        String memberInfo = "";
+        memberInfo = memberInfo.concat(Strings.isNullOrEmpty(this.getMachineName()) ? "" : this.getMachineName());
+        memberInfo = memberInfo.concat(Strings.isNullOrEmpty(this.getMemberName()) ? "" : this.getMemberName());
+        return memberInfo;
+    }
+
+    String getId() {
         return id;
     }
 
-    public void setId(String id) {
+    private void setId(String id) {
         this.id = id;
     }
 
-    public String getMachineName() {
+    String getMachineName() {
         return machineName;
     }
 
-    public void setMachineName(String machineName) {
+    private void setMachineName(String machineName) {
         this.machineName = machineName;
     }
 
-    public String getMemberName() {
+    String getMemberName() {
         return memberName;
     }
 
-    public void setMemberName(String memberName) {
+    private void setMemberName(String memberName) {
         this.memberName = memberName;
     }
+
+
 }

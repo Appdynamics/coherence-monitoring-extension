@@ -9,11 +9,16 @@ public enum CoherenceMBeanKeyPropertyEnum {
     DOMAIN("Domain"),
     SUBTYPE("subType"),
     CACHE("cache"),
+    TYPE("type"),
+    SCOPE("scope"),
+    NAME("name"),
+    KEYSPACE("keyspace"),
+    PATH("path"),
     TIER("tier");
 
     private final String name;
 
-    private CoherenceMBeanKeyPropertyEnum(String name){
+    CoherenceMBeanKeyPropertyEnum(String name){
         this.name = name;
     }
 

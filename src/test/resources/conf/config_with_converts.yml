@@ -1,0 +1,39 @@
+### ANY CHANGES TO THIS FILE DOES NOT REQUIRE A RESTART ###
+
+#This will create this metric in all the tiers, under this path
+metricPrefix: Custom Metrics|Coherence|
+
+#This will create it in specific Tier aka Component. Replace <COMPONENT_ID> with actual component Id.
+#To get the COMPONENT_ID, please refer https://docs.appdynamics.com/display/PRO42/Build+a+Monitoring+Extension+Using+Java
+#metricPrefix: Server|Component:<COMPONENT_ID>|Custom Metrics|Coherence
+
+# List of Coherence Instances
+instances:
+  - host: "192.168.57.102"
+    port: 1984
+    username: ""
+    password: ""
+    #displayName is a required field for node level metrics.
+    displayName: "local"
+
+
+# number of concurrent tasks.
+# This doesn't need to be changed unless many servers are configured
+numberOfThreads: 10
+
+
+# The configuration of different metrics from various mbeans of coherence server
+# For most cases, the mbean configuration does not need to be changed.
+#
+mbeans:
+  - objectName: "Coherence:type=Service,name=DistributedCache,nodeId=*"
+    #aggregation: true #uncomment this only if you want the extension to do aggregation for all the metrics in this mbean for a cluster
+    metrics:
+      include:
+        - TaskBacklog : "TaskBacklog" #The size of the backlog queue that holds tasks scheduled to be executed by one of the service pool threads.
+        - StatusHA : "StatusHA" #﻿The High Availability status for this service. # Values would be 1 for ENDANGERED, 2 for NODE-SAFE and 3 for MACHINE-SAFE
+          convert: {
+            "ENDANGERED" : 1,
+            "NODE-SAFE" : 2,
+            "MACHINE-SAFE" : 3
+          }
