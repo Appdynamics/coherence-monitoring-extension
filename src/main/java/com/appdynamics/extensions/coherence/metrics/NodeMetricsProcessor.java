@@ -12,6 +12,7 @@ import com.google.common.collect.Sets;
 import org.slf4j.LoggerFactory;
 
 import javax.management.*;
+import javax.management.openmbean.CompositeDataSupport;
 import javax.management.remote.JMXConnector;
 import java.io.IOException;
 import java.math.BigDecimal;
@@ -86,6 +87,44 @@ public class NodeMetricsProcessor {
         }
         return memberInfo;
     }
+// *****************
+//   Old collect
+// *****************
+
+//    private void collect(List<Metric> nodeMetrics,List<Attribute> attributes,ObjectInstance instance, Map<String, MetricProperties> metricPropsPerMetricName, String memberInfo) {
+//        for(Attribute attr : attributes) {
+//            try {
+//                String attrName = attr.getName();
+//                MetricProperties props = metricPropsPerMetricName.get(attrName);
+//                if(props == null){
+//                    logger.error("Could not find metric props for {}",attrName);
+//                    continue;
+//                }
+//                //get metric value by applying conversions if necessary
+//                BigDecimal metricValue = valueConverter.transform(attrName, attr.getValue(),props);
+//                if(metricValue != null){
+//                    String clusterKey = keyFormatter.getClusterKey(instance);
+//                    Metric nodeMetric = new Metric();
+//                    nodeMetric.setMetricName(attrName);
+//                    nodeMetric.setClusterKey(clusterKey);
+//                    String metricName = nodeMetric.getMetricNameOrAlias();
+//                    String nodeMetricKey = keyFormatter.getNodeKey(instance,metricName,clusterKey,memberInfo);
+//                    nodeMetric.setProperties(props);
+//                    nodeMetric.setMetricKey(nodeMetricKey);
+//                    nodeMetric.setMetricValue(metricValue);
+//                    nodeMetrics.add(nodeMetric);
+//                }
+//
+//            }
+//            catch(Exception e){
+//                logger.error("Error collecting value for {} {}", instance.getObjectName(),attr.getName(),e);
+//            }
+//        }
+//    }
+
+    public String getNodeId(ObjectInstance instance){
+        return keyFormatter.getKeyProperty(instance, CoherenceMBeanKeyPropertyEnum.NODEID.toString());
+    }
 
     private void collect(List<Metric> nodeMetrics,List<Attribute> attributes,ObjectInstance instance, Map<String, MetricProperties> metricPropsPerMetricName, String memberInfo) {
         for(Attribute attr : attributes) {
@@ -118,11 +157,9 @@ public class NodeMetricsProcessor {
         }
     }
 
-    public String getNodeId(ObjectInstance instance){
-        return keyFormatter.getKeyProperty(instance, CoherenceMBeanKeyPropertyEnum.NODEID.toString());
+    private boolean isCurrentObjectComposite(Attribute attribute) {
+        return attribute.getValue().getClass().equals(CompositeDataSupport.class);
     }
-
-
 
 
 }
