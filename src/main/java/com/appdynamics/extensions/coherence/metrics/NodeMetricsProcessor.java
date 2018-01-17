@@ -32,7 +32,6 @@ public class NodeMetricsProcessor {
     private final JMXConnector jmxConnection;
     private DerivedMetricFactory derivedMetricFactory;
 
-
     private final MetricKeyFormatter keyFormatter = new MetricKeyFormatter();
     private final MetricValueTransformer valueConverter = new MetricValueTransformer();
 
@@ -42,7 +41,7 @@ public class NodeMetricsProcessor {
         this.derivedMetricFactory = derivedMetricFactory;
     }
 
-    public List<Metric> getNodeMetrics(Map aConfigMBean,Map<String, CoherenceMember> membersMap, Map<String, MetricProperties> metricPropsMap) throws IntrospectionException, ReflectionException, InstanceNotFoundException, IOException, MalformedObjectNameException {
+    public List<Metric> getNodeMetrics(Map aConfigMBean,Map<String, CoherenceMember> membersMap, Map<String, MetricProperties> metricPropsMap, String metricPrefix) throws IntrospectionException, ReflectionException, InstanceNotFoundException, IOException, MalformedObjectNameException {
         List<Metric> nodeMetrics = Lists.newArrayList();
         String configObjectName = convertToString(aConfigMBean.get(OBJECT_NAME),"");
         //Each mbean mentioned in the config.yaml can fetch multiple object instances. Metrics need to be extracted
@@ -54,7 +53,7 @@ public class NodeMetricsProcessor {
             List<Attribute> attributes = jmxAdapter.getAttributes(jmxConnection,instance.getObjectName(), metricNamesToBeExtracted.toArray(new String[metricNamesToBeExtracted.size()]));
             String memberInfo = getNodeMemberInfo(instance,membersMap);
             //get node metrics
-            collect(nodeMetrics,attributes,instance,metricPropsMap,memberInfo);
+            collect(nodeMetrics,attributes,instance,metricPropsMap,memberInfo, metricPrefix);
             if(derivedMetricFactory != null){
                 derivedMetricFactory.compute(nodeMetrics,instance,memberInfo);
             }
@@ -126,36 +125,57 @@ public class NodeMetricsProcessor {
         return keyFormatter.getKeyProperty(instance, CoherenceMBeanKeyPropertyEnum.NODEID.toString());
     }
 
-    private void collect(List<Metric> nodeMetrics,List<Attribute> attributes,ObjectInstance instance, Map<String, MetricProperties> metricPropsPerMetricName, String memberInfo) {
-        for(Attribute attr : attributes) {
+    private void collect(List<Metric> nodeMetrics,List<Attribute> attributes,ObjectInstance instance, Map<String, MetricProperties> metricPropsPerMetricName, String memberInfo, String metricPrefix) {
+        for(Attribute attribute : attributes) {
             try {
-                String attrName = attr.getName();
-                MetricProperties props = metricPropsPerMetricName.get(attrName);
-                if(props == null){
-                    logger.error("Could not find metric props for {}",attrName);
-                    continue;
-                }
-                //get metric value by applying conversions if necessary
-                BigDecimal metricValue = valueConverter.transform(attrName, attr.getValue(),props);
-                if(metricValue != null){
-                    String clusterKey = keyFormatter.getClusterKey(instance);
-                    Metric nodeMetric = new Metric();
-                    nodeMetric.setMetricName(attrName);
-                    nodeMetric.setClusterKey(clusterKey);
-                    String metricName = nodeMetric.getMetricNameOrAlias();
-                    String nodeMetricKey = keyFormatter.getNodeKey(instance,metricName,clusterKey,memberInfo);
-                    nodeMetric.setProperties(props);
-                    nodeMetric.setMetricKey(nodeMetricKey);
-                    nodeMetric.setMetricValue(metricValue);
-                    nodeMetrics.add(nodeMetric);
-                }
+                String attrName = attribute.getName();
+                if (isCurrentObjectComposite(attribute)) {
+                    Set<String> attributesFound = ((CompositeDataSupport) attribute.getValue()).getCompositeType().keySet();
+                    for (String str : attributesFound) {
+                        String key = attrName + "." + str;
+                        if (metricPropsPerMetricName.containsKey(key)) {
+                            Object attributeValue = ((CompositeDataSupport) attribute.getValue()).get(str);
+                            setMetricDetails(metricPrefix, key, attributeValue, instance, metricPropsPerMetricName, nodeMetrics, memberInfo);
+                        }
 
+                    }
+                } else {
+                    setMetricDetails(metricPrefix, attrName, attribute.getValue().toString(), instance, (Map)metricPropsPerMetricName, nodeMetrics, memberInfo );
+                }
             }
+
             catch(Exception e){
-                logger.error("Error collecting value for {} {}", instance.getObjectName(),attr.getName(),e);
+                logger.error("Error collecting value for {} {}", instance.getObjectName(),attribute.getName(),e);
             }
         }
     }
+
+    private void setMetricDetails(String metricPrefix, String attrName, Object attributeValue, ObjectInstance instance, Map<String,
+            MetricProperties> metricPropsPerMetricName, List<Metric> nodeMetrics, String memberInfo){
+
+        MetricProperties props = metricPropsPerMetricName.get(attrName);
+        if(props == null){
+            logger.error("Could not find metric props for {}",attrName);
+        }
+        //get metric value by applying conversions if necessary
+        String clusterKey = keyFormatter.getClusterKey(instance);
+
+        BigDecimal metricValue = valueConverter.transform(metricPrefix + "|" + clusterKey, attributeValue,props);
+        if(metricValue != null){
+            Metric nodeMetric = new Metric();
+            nodeMetric.setMetricName(attrName);
+            nodeMetric.setClusterKey(clusterKey);
+            String metricName = nodeMetric.getMetricNameOrAlias();
+            String nodeMetricKey = keyFormatter.getNodeKey(instance,metricName,clusterKey,memberInfo);
+            nodeMetric.setProperties(props);
+            nodeMetric.setMetricKey(nodeMetricKey);
+            nodeMetric.setMetricValue(metricValue);
+            nodeMetrics.add(nodeMetric);
+        }
+
+    }
+
+
 
     private boolean isCurrentObjectComposite(Attribute attribute) {
         return attribute.getValue().getClass().equals(CompositeDataSupport.class);

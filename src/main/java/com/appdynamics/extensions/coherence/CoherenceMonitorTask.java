@@ -88,7 +88,7 @@ class CoherenceMonitorTask implements Runnable {
                 try {
                     java.util.Map<String,MetricProperties> metricPropsMap = propertyBuilder.build(aConfigMBean);
                     NodeMetricsProcessor nodeProcessor = new NodeMetricsProcessor(jmxAdapter,jmxConnection,new DerivedMetricFactory(CACHE_HIT_RATIO,THREAD_UTILIZATION_RATIO));
-                    List<Metric> nodeMetrics = nodeProcessor.getNodeMetrics(aConfigMBean,membersMap, metricPropsMap);
+                    List<Metric> nodeMetrics = nodeProcessor.getNodeMetrics(aConfigMBean,membersMap, metricPropsMap, metricPrefix);
                     /* to aggregate all the node metrics to cluster metrics. */
                     AggregatorFactory aggregatorFactory = new AggregatorFactory();
                     clusterMetricsCollector.collect(aggregatorFactory,nodeMetrics);
