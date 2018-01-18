@@ -1,6 +1,8 @@
 package com.appdynamics.extensions.coherence.filters;
 
 
+import com.appdynamics.extensions.coherence.Util;
+
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
@@ -22,6 +24,9 @@ public class IncludeFilter {
             //Get the First Entry which is the metric
             Map.Entry firstEntry = (Map.Entry) metric.entrySet().iterator().next();
             String metricName = firstEntry.getKey().toString();
+            if (Util.isCompositeObject(metricName)) {
+                metricName = Util.getMetricNameFromCompositeObject(metricName);
+            }
             if(allMetrics.contains(metricName)) {
                 filteredSet.add(metricName); //to get jmx metrics
             }
